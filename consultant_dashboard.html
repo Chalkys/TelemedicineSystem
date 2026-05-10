@@ -12,13 +12,13 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            font-family: 'Segoe UI', sans-serif;
+            background: #f5f7fa;
             min-height: 100vh;
         }
 
         header {
-            background: rgba(0,0,0,0.2);
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             color: white;
             padding: 15px 30px;
             display: flex;
@@ -35,20 +35,15 @@
         .card {
             background: white;
             border-radius: 10px;
-            padding: 30px;
-            text-align: center;
+            padding: 25px;
+            margin-bottom: 20px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
 
-        h2 {
-            color: #333;
-            margin-bottom: 20px;
-        }
-
-        .message {
-            color: #666;
-            margin-bottom: 20px;
-        }
+            .card h3 {
+                color: #333;
+                margin-bottom: 15px;
+            }
 
         .logout-btn {
             background: #dc3545;
@@ -62,6 +57,65 @@
             .logout-btn:hover {
                 background: #c82333;
             }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f5f5f5;
+            padding: 10px;
+            text-align: left;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .btn-accept {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+
+        .btn-reject {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .btn-accept:hover {
+            background: #218838;
+        }
+
+        .btn-reject:hover {
+            background: #c82333;
+        }
+
+        .status {
+            font-weight: bold;
+        }
+
+        .status-pending {
+            color: #ffc107;
+        }
+
+        .status-accepted {
+            color: #28a745;
+        }
+
+        .status-rejected {
+            color: #dc3545;
+        }
     </style>
 </head>
 <body>
@@ -71,16 +125,100 @@
     </header>
     <div class="container">
         <div class="card">
-            <h2>👨‍⚕️ Добро пожаловать, консультант!</h2>
-            <p class="message">Ваш личный кабинет находится в разработке.</p>
-            <p class="message">В ближайшее время здесь появится расписание, список пациентов и возможность проведения видеоконсультаций.</p>
+            <h3>📋 Заявки на консультацию</h3>
+            <div id="appList">Загрузка...</div>
         </div>
     </div>
+
     <script>
+        const API_URL = 'https://localhost:7189';
         const token = localStorage.getItem('token');
         const role = localStorage.getItem('role');
-        if (!token || role !== 'Consultant') window.location.href = 'login.html';
-        function logout() { localStorage.clear(); window.location.href = 'login.html'; }
+
+        if (!token || role !== 'Consultant') {
+            window.location.href = 'login.html';
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+
+        async function loadApplications() {
+            try {
+                const response = await fetch(`${API_URL}/api/Application/all`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const apps = await response.json();
+                    if (apps.length === 0) {
+                        document.getElementById('appList').innerHTML = '<p>Нет ожидающих заявок.</p>';
+                        return;
+                    }
+
+                    let html = `<table>
+                            <tr><th>Пациент</th><th>Тема</th><th>Тип</th><th>Дата</th><th>Действия</th></tr>`;
+                    apps.forEach(app => {
+                        html += `
+                                <tr>
+                                    <td>${app.patientFullName}</td>
+                                    <td>${app.subject}</td>
+                                    <td>${app.type === 'F' ? 'Бесплатная' : 'Платная'}</td>
+                                    <td>${new Date(app.createdAt).toLocaleDateString()}</td>
+                                    <td>
+                                        <button class="btn-accept" onclick="acceptApp('${app.applicationId}')">Принять</button>
+                                        <button class="btn-reject" onclick="rejectApp('${app.applicationId}')">Отклонить</button>
+                                    </td>
+                                </tr>`;
+                    });
+                    html += '</table>';
+                    document.getElementById('appList').innerHTML = html;
+                } else {
+                    document.getElementById('appList').innerHTML = '<p style="color:red;">Ошибка загрузки заявок.</p>';
+                }
+            } catch (err) {
+                document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
+            }
+        }
+
+        async function acceptApp(appId) {
+            try {
+                const response = await fetch(`${API_URL}/api/Application/${appId}/accept`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    alert('Заявка принята! Консультация создана.');
+                    loadApplications();
+                } else {
+                    const error = await response.text();
+                    alert('Ошибка: ' + error);
+                }
+            } catch (err) {
+                alert('Ошибка соединения: ' + err.message);
+            }
+        }
+
+        async function rejectApp(appId) {
+            try {
+                const response = await fetch(`${API_URL}/api/Application/${appId}/reject`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (response.ok) {
+                    alert('Заявка отклонена.');
+                    loadApplications();
+                } else {
+                    const error = await response.text();
+                    alert('Ошибка: ' + error);
+                }
+            } catch (err) {
+                alert('Ошибка соединения: ' + err.message);
+            }
+        }
+
+        loadApplications();
     </script>
 </body>
 </html>

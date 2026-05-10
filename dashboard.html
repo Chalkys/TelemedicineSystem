@@ -173,31 +173,141 @@
 
     <script>
         const API_URL = 'https://localhost:7189';
-
-        // Получаем токен из localStorage
         const token = localStorage.getItem('token');
 
-        // Отладка: выводим всё в консоль
         console.log('=== DASHBOARD DEBUG ===');
         console.log('1. Token from localStorage:', token);
         console.log('2. Token length:', token ? token.length : 0);
-        console.log('3. Full localStorage:', localStorage);
 
-        // Проверяем наличие токена
         if (!token) {
             console.log('❌ No token found! Redirecting to login...');
             alert('Сессия не найдена. Пожалуйста, войдите снова.');
             window.location.href = 'login.html';
         }
 
-        // Функция загрузки данных пользователя
-        async function loadUserData() {
-            console.log('4. Starting loadUserData()...');
-            console.log('5. Fetch URL:', `${API_URL}/api/Users/me`);
+        // ===== ФУНКЦИИ ЗАЯВОК (снаружи, доступны глобально) =====
+
+        function showCreateApplication() {
+            document.getElementById('content').innerHTML = `
+                <div class="card">
+                    <h3>📝 Новая заявка на консультацию</h3>
+                    <form id="applicationForm">
+                        <div style="margin-bottom:15px;">
+                            <label style="display:block;margin-bottom:5px;font-weight:500;">Тип консультации:</label>
+                            <select id="appType" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;">
+                                <option value="F">Бесплатная</option>
+                                <option value="P">Платная</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom:15px;">
+                            <label style="display:block;margin-bottom:5px;font-weight:500;">Тема обращения:</label>
+                            <input type="text" id="appSubject" maxlength="200" required
+                                   style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px;"
+                                   placeholder="Например: Головная боль, Консультация терапевта">
+                        </div>
+                        <div style="display:flex;gap:10px;">
+                            <button type="submit" style="background:#667eea;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">
+                                Отправить заявку
+                            </button>
+                            <button type="button" onclick="loadUserData()" style="background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">
+                                Отмена
+                            </button>
+                        </div>
+                    </form>
+                    <div id="appResult" style="margin-top:15px;"></div>
+                </div>`;
+
+            document.getElementById('applicationForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const type = document.getElementById('appType').value;
+                const subject = document.getElementById('appSubject').value;
+
+                try {
+                    const response = await fetch(`${API_URL}/api/Application/create`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ type, subject })
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        document.getElementById('appResult').innerHTML =
+                            `<div style="background:#d4edda;color:#155724;padding:15px;border-radius:5px;">
+                                ✅ Заявка создана! ID: ${result.applicationId}
+                                <br><a href="#" onclick="showMyApplications()" style="color:#155724;">Посмотреть мои заявки</a>
+                            </div>`;
+                        document.getElementById('applicationForm').reset();
+                    } else {
+                        const error = await response.text();
+                        document.getElementById('appResult').innerHTML =
+                            `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">
+                                ❌ Ошибка: ${error}
+                            </div>`;
+                    }
+                } catch (err) {
+                    document.getElementById('appResult').innerHTML =
+                        `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">
+                            ❌ Ошибка соединения: ${err.message}
+                        </div>`;
+                }
+            });
+        }
+
+        async function showMyApplications() {
+            document.getElementById('content').innerHTML = `
+                <div class="card">
+                    <h3>📋 Мои заявки</h3>
+                    <div id="appList">Загрузка...</div>
+                    <button onclick="loadUserData()" style="margin-top:15px;background:#667eea;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">
+                        ← Назад
+                    </button>
+                </div>`;
 
             try {
-                console.log('6. Sending request with Authorization header...');
+                const response = await fetch(`${API_URL}/api/Application/my`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
 
+                if (response.ok) {
+                    const apps = await response.json();
+                    if (apps.length === 0) {
+                        document.getElementById('appList').innerHTML = '<p>У вас пока нет заявок.</p>';
+                        return;
+                    }
+
+                    let html = '<table style="width:100%;border-collapse:collapse;">';
+                    html += '<tr style="background:#f5f5f5;"><th style="padding:10px;text-align:left;">Тема</th><th>Тип</th><th>Статус</th><th>Дата</th></tr>';
+                    apps.forEach(app => {
+                        const statusColor = app.status === 'pending' ? '#ffc107' :
+                            app.status === 'accepted' ? '#28a745' : '#dc3545';
+                        const statusText = app.status === 'pending' ? 'Ожидает' :
+                            app.status === 'accepted' ? 'Принята' : 'Отклонена';
+                        html += `
+                            <tr style="border-bottom:1px solid #eee;">
+                                <td style="padding:10px;">${app.subject}</td>
+                                <td style="padding:10px;text-align:center;">${app.type === 'F' ? 'Бесплатная' : 'Платная'}</td>
+                                <td style="padding:10px;text-align:center;color:${statusColor};font-weight:bold;">${statusText}</td>
+                                <td style="padding:10px;text-align:center;">${new Date(app.createdAt).toLocaleDateString()}</td>
+                            </tr>`;
+                    });
+                    html += '</table>';
+                    document.getElementById('appList').innerHTML = html;
+                } else {
+                    document.getElementById('appList').innerHTML = '<p style="color:red;">Ошибка загрузки заявок.</p>';
+                }
+            } catch (err) {
+                document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
+            }
+        }
+
+        // ===== ЗАГРУЗКА ДАННЫХ ПОЛЬЗОВАТЕЛЯ =====
+
+        async function loadUserData() {
+            console.log('Starting loadUserData()...');
+            try {
                 const response = await fetch(`${API_URL}/api/Users/me`, {
                     method: 'GET',
                     headers: {
@@ -206,11 +316,9 @@
                     }
                 });
 
-                console.log('7. Response status:', response.status);
-                console.log('8. Response status text:', response.statusText);
+                console.log('Response status:', response.status);
 
                 if (response.status === 401) {
-                    console.log('❌ 401 Unauthorized - token invalid or expired');
                     localStorage.clear();
                     alert('Сессия истекла. Пожалуйста, войдите снова.');
                     window.location.href = 'login.html';
@@ -218,132 +326,110 @@
                 }
 
                 if (!response.ok) {
-                    console.log('❌ HTTP error:', response.status);
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
                 const user = await response.json();
                 console.log('✅ User data received:', user);
-
-                // Успех - отображаем данные
                 displayDashboard(user);
 
             } catch (error) {
                 console.error('❌ Fetch error:', error);
                 document.getElementById('content').innerHTML = `
-                        <div class="error">
-                            <strong>Ошибка загрузки данных</strong><br><br>
-                            Детали: ${error.message}<br><br>
-                            <strong>Возможные причины:</strong><br>
-                            • API не запущен (запустите F5 в Visual Studio)<br>
-                            • Неправильный порт (должен быть 7189)<br>
-                            • CORS не настроен<br><br>
-                            <button onclick="location.reload()">Повторить</button>
-                        </div>
-                    `;
+                    <div class="error">
+                        <strong>Ошибка загрузки данных</strong><br><br>
+                        Детали: ${error.message}<br><br>
+                        <button onclick="location.reload()">Повторить</button>
+                    </div>`;
             }
         }
 
         function displayDashboard(user) {
-            console.log('Displaying dashboard for user:', user);
-
-            // Обновляем шапку
             document.getElementById('userEmail').textContent = user.email;
             document.getElementById('userRole').textContent = getRoleName(user.role);
 
             let html = `<div class="welcome">👋 Здравствуйте, ${user.surname || user.name || user.email}!</div>`;
 
-            // Карточка с личной информацией
             html += `
-                    <div class="card">
-                        <h3>📋 Личная информация</h3>
-                        <div class="info-row">
-                            <div class="info-label">Email:</div>
-                            <div class="info-value">${user.email}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Роль:</div>
-                            <div class="info-value">${getRoleName(user.role)}</div>
-                        </div>
-                `;
+                <div class="card">
+                    <h3>📋 Личная информация</h3>
+                    <div class="info-row">
+                        <div class="info-label">Email:</div>
+                        <div class="info-value">${user.email}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Роль:</div>
+                        <div class="info-value">${getRoleName(user.role)}</div>
+                    </div>`;
 
             if (user.name) {
                 html += `
-                        <div class="info-row">
-                            <div class="info-label">ФИО:</div>
-                            <div class="info-value">${user.surname || ''} ${user.name || ''} ${user.middleName || ''}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Дата рождения:</div>
-                            <div class="info-value">${user.dateOfBirth ? new Date(user.dateOfBirth).toLocaleDateString() : '—'}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Пол:</div>
-                            <div class="info-value">${user.gender === 'Male' ? 'Мужской' : user.gender === 'Female' ? 'Женский' : '—'}</div>
-                        </div>
-                        <div class="info-row">
-                            <div class="info-label">Контактные данные:</div>
-                            <div class="info-value">${user.contactInfo || '—'}</div>
-                        </div>
-                    `;
+                    <div class="info-row">
+                        <div class="info-label">ФИО:</div>
+                        <div class="info-value">${user.surname || ''} ${user.name || ''} ${user.middleName || ''}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Дата рождения:</div>
+                        <div class="info-value">${user.dateOfBirth ? new Date(user.dateOfBirth).toLocaleDateString() : '—'}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Пол:</div>
+                        <div class="info-value">${user.gender === 'Male' ? 'Мужской' : user.gender === 'Female' ? 'Женский' : '—'}</div>
+                    </div>
+                    <div class="info-row">
+                        <div class="info-label">Контактные данные:</div>
+                        <div class="info-value">${user.contactInfo || '—'}</div>
+                    </div>`;
             }
 
-            html += `</div>`;
-
-            // Меню в зависимости от роли
-            html += `<div class="menu">`;
+            html += `</div><div class="menu">`;
 
             if (user.role === 'Patient') {
                 html += `
-                        <div class="menu-item" onclick="alert('Функция в разработке')">
-                            <h4>📅 Запись к врачу</h4>
-                            <p>Записаться на консультацию</p>
-                        </div>
-                        <div class="menu-item" onclick="alert('Функция в разработке')">
-                            <h4>📋 Мои консультации</h4>
-                            <p>История обращений</p>
-                        </div>
-                        <div class="menu-item" onclick="alert('Функция в разработке')">
-                            <h4>📄 Медицинская карта</h4>
-                            <p>Просмотр результатов</p>
-                        </div>
-                    `;
+                    <div class="menu-item" onclick="showCreateApplication()">
+                        <h4>📝 Создать заявку</h4>
+                        <p>Отправить заявку на консультацию</p>
+                    </div>
+                    <div class="menu-item" onclick="showMyApplications()">
+                        <h4>📋 Мои заявки</h4>
+                        <p>История обращений</p>
+                    </div>
+                    <div class="menu-item" onclick="alert('Функция в разработке')">
+                        <h4>📄 Медицинская карта</h4>
+                        <p>Просмотр результатов</p>
+                    </div>`;
             } else if (user.role === 'Consultant') {
                 html += `
-                        <div class="menu-item" onclick="alert('Функция в разработке')">
-                            <h4>👥 Мои пациенты</h4>
-                            <p>Список пациентов</p>
-                        </div>
-                        <div class="menu-item" onclick="alert('Функция в разработке')">
-                            <h4>📅 Расписание</h4>
-                            <p>Управление расписанием</p>
-                        </div>
-                        <div class="menu-item" onclick="alert('Функция в разработке')">
-                            <h4>💬 Консультации</h4>
-                            <p>Активные консультации</p>
-                        </div>
-                    `;
+                    <div class="menu-item" onclick="alert('Функция в разработке')">
+                        <h4>👥 Мои пациенты</h4>
+                        <p>Список пациентов</p>
+                    </div>
+                    <div class="menu-item" onclick="alert('Функция в разработке')">
+                        <h4>📅 Расписание</h4>
+                        <p>Управление расписанием</p>
+                    </div>
+                    <div class="menu-item" onclick="alert('Функция в разработке')">
+                        <h4>💬 Консультации</h4>
+                        <p>Активные консультации</p>
+                    </div>`;
             } else if (user.role === 'Operator') {
                 html += `
-                        <div class="menu-item" onclick="alert('Функция в разработке')">
-                            <h4>👥 Управление пользователями</h4>
-                            <p>Регистрация врачей</p>
-                        </div>
-                        <div class="menu-item" onclick="alert('Функция в разработке')">
-                            <h4>📊 Статистика</h4>
-                            <p>Отчеты по системе</p>
-                        </div>
-                        <div class="menu-item" onclick="alert('Функция в разработке')">
-                            <h4>⚙️ Настройки</h4>
-                            <p>Параметры системы</p>
-                        </div>
-                    `;
+                    <div class="menu-item" onclick="alert('Функция в разработке')">
+                        <h4>👥 Управление пользователями</h4>
+                        <p>Регистрация врачей</p>
+                    </div>
+                    <div class="menu-item" onclick="alert('Функция в разработке')">
+                        <h4>📊 Статистика</h4>
+                        <p>Отчеты по системе</p>
+                    </div>
+                    <div class="menu-item" onclick="alert('Функция в разработке')">
+                        <h4>⚙️ Настройки</h4>
+                        <p>Параметры системы</p>
+                    </div>`;
             }
 
             html += `</div>`;
-
             document.getElementById('content').innerHTML = html;
-            console.log('Dashboard displayed successfully');
         }
 
         function getRoleName(role) {
@@ -356,12 +442,11 @@
         }
 
         function logout() {
-            console.log('Logging out, clearing localStorage');
             localStorage.clear();
             window.location.href = 'login.html';
         }
 
-        // Запускаем загрузку данных
+        // Запуск
         loadUserData();
     </script>
 </body>
