@@ -1,0 +1,32 @@
+# Visual Studio
+.vs/
+bin/
+obj/
+Debug/
+Release/
+*.user
+*.suo
+
+# .NET
+*.cache
+*.pidb
+*.log
+*.tmp
+
+# NuGet
+packages/
+
+# User secrets
+secrets.json
+
+# Node.js (для фронтенда)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build results
+*.exe
+*.dll
+*.pdb

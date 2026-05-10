@@ -1,0 +1,86 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кабинет консультанта - Телемедицина</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            min-height: 100vh;
+        }
+
+        header {
+            background: rgba(0,0,0,0.2);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .message {
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+            .logout-btn:hover {
+                background: #c82333;
+            }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">🏥 Телемедицина - Кабинет консультанта</div>
+        <button class="logout-btn" onclick="logout()">Выйти</button>
+    </header>
+    <div class="container">
+        <div class="card">
+            <h2>👨‍⚕️ Добро пожаловать, консультант!</h2>
+            <p class="message">Ваш личный кабинет находится в разработке.</p>
+            <p class="message">В ближайшее время здесь появится расписание, список пациентов и возможность проведения видеоконсультаций.</p>
+        </div>
+    </div>
+    <script>
+        const token = localStorage.getItem('token');
+        const role = localStorage.getItem('role');
+        if (!token || role !== 'Consultant') window.location.href = 'login.html';
+        function logout() { localStorage.clear(); window.location.href = 'login.html'; }
+    </script>
+</body>
+</html>

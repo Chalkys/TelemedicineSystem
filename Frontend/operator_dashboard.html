@@ -1,0 +1,537 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель оператора - Телемедицина</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f2f5;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logout-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+            .logout-btn:hover {
+                background: rgba(255,255,255,0.3);
+            }
+
+        .container {
+            max-width: 1400px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        h2 {
+            color: #333;
+        }
+
+        .add-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+            .add-btn:hover {
+                background: #218838;
+            }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .users-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f8f9fa;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #555;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #dee2e6;
+            cursor: pointer;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .role-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .role-Patient {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .role-Consultant {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .role-Operator {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 30px;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .close {
+            font-size: 28px;
+            cursor: pointer;
+            color: #999;
+        }
+
+            .close:hover {
+                color: #333;
+            }
+
+        .detail-row {
+            display: flex;
+            margin-bottom: 12px;
+        }
+
+        .detail-label {
+            width: 140px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .detail-value {
+            color: #333;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+
+        .delete-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+            .delete-btn:hover {
+                background: #c82333;
+            }
+
+        .delete-warning {
+            color: #dc3545;
+            font-size: 12px;
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">🏥 Телемедицина - Панель оператора</div>
+        <div class="user-info">
+            <span id="operatorEmail">Загрузка...</span>
+            <button class="logout-btn" onclick="logout()">Выйти</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="header-actions">
+            <h2>👥 Управление пользователями</h2>
+            <button class="add-btn" onclick="openAddConsultantModal()">➕ Добавить консультанта</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card"><div class="stat-number" id="totalUsers">0</div><div class="stat-label">Всего пользователей</div></div>
+            <div class="stat-card"><div class="stat-number" id="patientCount">0</div><div class="stat-label">Пациенты</div></div>
+            <div class="stat-card"><div class="stat-number" id="consultantCount">0</div><div class="stat-label">Консультанты</div></div>
+            <div class="stat-card"><div class="stat-number" id="operatorCount">0</div><div class="stat-label">Операторы</div></div>
+        </div>
+
+        <div class="users-table">
+            <table id="usersTable">
+                <thead><tr><th>Email</th><th>ФИО</th><th>Роль</th></tr></thead>
+                <tbody id="usersTableBody"><tr><td colspan="3" class="loading">Загрузка...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Модальное окно для просмотра деталей -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header"><h3>📋 Детали пользователя</h3><span class="close" onclick="closeModal()">&times;</span></div>
+            <div id="modalContent">Загрузка...</div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для добавления консультанта -->
+    <div id="addConsultantModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header"><h3>➕ Добавить консультанта</h3><span class="close" onclick="closeAddModal()">&times;</span></div>
+            <form id="addConsultantForm">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div><label>Email *</label><input type="email" id="consEmail" required></div>
+                    <div><label>Пароль *</label><input type="password" id="consPassword" required></div>
+                    <div><label>Фамилия *</label><input type="text" id="consSurname" required></div>
+                    <div><label>Имя *</label><input type="text" id="consName" required></div>
+                    <div><label>Отчество</label><input type="text" id="consMiddlename"></div>
+                    <div><label>Специальность *</label><input type="text" id="consSpecialty" required></div>
+                    <div><label>Должность *</label><input type="text" id="consPost" required></div>
+                    <div><label>Стаж (лет) *</label><input type="number" id="consSeniority" required></div>
+                    <div><label>График работы</label><input type="text" id="consWorkHours"></div>
+                    <div><label>Ученая степень/категория</label><input type="text" id="consQualification"></div>
+                </div>
+                <div style="margin-top: 15px;"><label>Образование</label><textarea id="consEducationInfo" rows="3" style="width:100%;"></textarea></div>
+                <div style="margin-top: 15px;"><label>Опыт работы</label><textarea id="consExperience" rows="3" style="width:100%;"></textarea></div>
+                <div style="margin-top: 20px;"><label>Связь с мед. организацией</label><input type="text" id="consConnectionToCenter" style="width:100%;"></div>
+                <button type="submit" style="margin-top:20px; width:100%; background:#28a745; color:white; padding:12px; border:none; border-radius:5px; cursor:pointer;">Зарегистрировать</button>
+            </form>
+            <div id="addMessage" style="margin-top:15px;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://localhost:7189';
+        const token = localStorage.getItem('token');
+        const userRole = localStorage.getItem('role');
+
+        console.log('Token:', token ? token.substring(0, 50) + '...' : 'null');
+        console.log('Role:', userRole);
+
+        if (!token || userRole !== 'Operator') {
+            alert('Доступ запрещён. Требуется роль Оператора.');
+            window.location.href = 'login.html';
+        }
+
+        async function loadUsers() {
+            try {
+                const response = await fetch(`${API_URL}/api/Operator/users`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.status === 401) {
+                    localStorage.clear();
+                    window.location.href = 'login.html';
+                    return;
+                }
+
+                const users = await response.json();
+                displayUsers(users);
+                updateStats(users);
+            } catch (error) {
+                console.error('Error loading users:', error);
+            }
+        }
+
+        function displayUsers(users) {
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
+
+            users.forEach(user => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                        <td>${user.email}</td>
+                        <td>${user.fullName || '—'}</td>
+                        <td><span class="role-badge role-${user.role}">${getRoleName(user.role)}</span></td>
+                    `;
+                row.onclick = () => showUserDetails(user.userId);
+            });
+        }
+
+        async function showUserDetails(userId) {
+            const modal = document.getElementById('detailModal');
+            const modalContent = document.getElementById('modalContent');
+            modal.style.display = 'flex';
+            modalContent.innerHTML = 'Загрузка...';
+
+            try {
+                const response = await fetch(`${API_URL}/api/Operator/users/${userId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const data = await response.json();
+                displayUserDetails(data, modalContent);
+            } catch (error) {
+                modalContent.innerHTML = '<p style="color:red">Ошибка загрузки</p>';
+            }
+        }
+
+        function displayUserDetails(data, container) {
+            let html = `<div class="detail-row"><div class="detail-label">Email:</div><div class="detail-value">${data.email}</div></div>`;
+            html += `<div class="detail-row"><div class="detail-label">Роль:</div><div class="detail-value">${getRoleName(data.role)}</div></div>`;
+
+            if (data.role === 'Patient' && data.patient) {
+                const p = data.patient;
+                html += `<hr><h4>Пациент</h4>`;
+                html += `<div class="detail-row"><div class="detail-label">ФИО:</div><div class="detail-value">${p.surname || ''} ${p.name || ''} ${p.middleName || ''}</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">Дата рождения:</div><div class="detail-value">${p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString() : '—'}</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">Пол:</div><div class="detail-value">${p.gender === 'Male' ? 'Мужской' : p.gender === 'Female' ? 'Женский' : '—'}</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">Контактные данные:</div><div class="detail-value">${p.contactInfo || '—'}</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">Полис ОМС/ДМС:</div><div class="detail-value">${p.insurancePolicyNumber || '—'}</div></div>`;
+            }
+            else if (data.role === 'Consultant' && data.consultant) {
+                const c = data.consultant;
+                html += `<hr><h4>Консультант</h4>`;
+                html += `<div class="detail-row"><div class="detail-label">ФИО:</div><div class="detail-value">${c.surname || ''} ${c.name || ''} ${c.middleName || ''}</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">Специальность:</div><div class="detail-value">${c.specialty || '—'}</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">Должность:</div><div class="detail-value">${c.post || '—'}</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">Стаж:</div><div class="detail-value">${c.seniority || '—'} лет</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">График работы:</div><div class="detail-value">${c.workHours || '—'}</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">Образование:</div><div class="detail-value">${c.educationInfo || '—'}</div></div>`;
+            }
+            else if (data.role === 'Operator' && data.operator) {
+                const o = data.operator;
+                html += `<hr><h4>Оператор</h4>`;
+                html += `<div class="detail-row"><div class="detail-label">Полное имя:</div><div class="detail-value">${o.fullName || '—'}</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">Адрес:</div><div class="detail-value">${o.address || '—'}</div></div>`;
+                html += `<div class="detail-row"><div class="detail-label">Контакты:</div><div class="detail-value">${o.contactInfo || '—'}</div></div>`;
+            }
+
+            // Добавляем кнопку удаления (кроме текущего оператора)
+            const currentUserId = localStorage.getItem('userId');
+            if (data.userId !== currentUserId) {
+                html += `<hr><button class="delete-btn" onclick="deleteUser('${data.userId}', '${data.email}')">🗑️ Удалить пользователя</button>`;
+                html += `<div class="delete-warning">⚠️ Внимание! Это действие необратимо.</div>`;
+            } else {
+                html += `<hr><div class="delete-warning">🔒 Вы не можете удалить свой собственный аккаунт</div>`;
+            }
+
+            container.innerHTML = html;
+        }
+
+        async function deleteUser(userId, userEmail) {
+            const confirmed = confirm(`Вы уверены, что хотите удалить пользователя "${userEmail}"?\n\nЭто действие НЕОБРАТИМО!`);
+
+            if (!confirmed) return;
+
+            try {
+                const response = await fetch(`${API_URL}/api/Operator/users/${userId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(`✅ Пользователь "${userEmail}" успешно удалён`);
+                    closeModal();
+                    loadUsers(); // Обновляем список пользователей
+                } else {
+                    alert(`❌ Ошибка: ${result.message || 'Не удалось удалить пользователя'}`);
+                }
+            } catch (error) {
+                console.error('Delete error:', error);
+                alert('❌ Ошибка подключения к серверу');
+            }
+        }
+
+        function updateStats(users) {
+            document.getElementById('totalUsers').textContent = users.length;
+            document.getElementById('patientCount').textContent = users.filter(u => u.role === 'Patient').length;
+            document.getElementById('consultantCount').textContent = users.filter(u => u.role === 'Consultant').length;
+            document.getElementById('operatorCount').textContent = users.filter(u => u.role === 'Operator').length;
+        }
+
+        function getRoleName(role) {
+            const roles = { 'Patient': 'Пациент', 'Consultant': 'Консультант', 'Operator': 'Оператор' };
+            return roles[role] || role;
+        }
+
+        function openAddConsultantModal() {
+            document.getElementById('addConsultantModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('detailModal').style.display = 'none';
+        }
+
+        function closeAddModal() {
+            document.getElementById('addConsultantModal').style.display = 'none';
+            document.getElementById('addConsultantForm').reset();
+            document.getElementById('addMessage').innerHTML = '';
+        }
+
+        document.getElementById('addConsultantForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const data = {
+                email: document.getElementById('consEmail').value,
+                password: document.getElementById('consPassword').value,
+                name: document.getElementById('consName').value,
+                surname: document.getElementById('consSurname').value,
+                middleName: document.getElementById('consMiddlename').value || '',
+                specialty: document.getElementById('consSpecialty').value,
+                post: document.getElementById('consPost').value,
+                educationInfo: document.getElementById('consEducationInfo').value || '',
+                seniority: parseInt(document.getElementById('consSeniority').value),
+                experience: document.getElementById('consExperience').value || '',
+                workHours: document.getElementById('consWorkHours').value || '',
+                connectionToCenter: document.getElementById('consConnectionToCenter').value || ''
+            };
+
+            const msgDiv = document.getElementById('addMessage');
+            msgDiv.innerHTML = 'Отправка...';
+            msgDiv.style.color = 'blue';
+
+            try {
+                const response = await fetch(`${API_URL}/api/Operator/register/consultant`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                console.log('Response status:', response.status);
+                const result = await response.json();
+                console.log('Response result:', result);
+
+                if (response.ok) {
+                    msgDiv.innerHTML = '✅ Консультант успешно зарегистрирован!';
+                    msgDiv.style.color = 'green';
+                    setTimeout(() => {
+                        closeAddModal();
+                        loadUsers();
+                    }, 2000);
+                } else {
+                    msgDiv.innerHTML = '❌ ' + (result.message || 'Ошибка регистрации');
+                    msgDiv.style.color = 'red';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                msgDiv.innerHTML = '❌ Ошибка подключения к серверу. Проверьте консоль (F12)';
+                msgDiv.style.color = 'red';
+            }
+        });
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+
+        loadUsers();
+    </script>
+</body>
+</html>
