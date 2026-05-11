@@ -126,6 +126,16 @@
     <div class="container">
         <div class="card">
             <h3>📋 Заявки на консультацию</h3>
+            <div style="margin-bottom:15px;display:flex;gap:10px;">
+                <button id="tab-pending" class="tab-btn" onclick="switchTab('pending')"
+                        style="padding:8px 20px;border:none;border-radius:5px;cursor:pointer;background:#11998e;color:white;">
+                    Ожидающие
+                </button>
+                <button id="tab-accepted" class="tab-btn" onclick="switchTab('accepted')"
+                        style="padding:8px 20px;border:none;border-radius:5px;cursor:pointer;background:#f5f5f5;">
+                    Принятые
+                </button>
+            </div>
             <div id="appList">Загрузка...</div>
         </div>
     </div>
@@ -134,6 +144,7 @@
         const API_URL = 'https://localhost:7189';
         const token = localStorage.getItem('token');
         const role = localStorage.getItem('role');
+        let currentTab = 'pending';
 
         if (!token || role !== 'Consultant') {
             window.location.href = 'login.html';
@@ -144,33 +155,54 @@
             window.location.href = 'login.html';
         }
 
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(b => b.style.background = '#f5f5f5');
+            document.getElementById('tab-' + tab).style.background = '#11998e';
+            document.getElementById('tab-' + tab).style.color = 'white';
+            loadApplications();
+        }
+
         async function loadApplications() {
+            document.getElementById('appList').innerHTML = 'Загрузка...';
             try {
-                const response = await fetch(`${API_URL}/api/Application/all`, {
+                const url = currentTab === 'pending'
+                    ? `${API_URL}/api/Application/all`
+                    : `${API_URL}/api/Application/my-consultant`;
+
+                const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 if (response.ok) {
                     const apps = await response.json();
                     if (apps.length === 0) {
-                        document.getElementById('appList').innerHTML = '<p>Нет ожидающих заявок.</p>';
+                        document.getElementById('appList').innerHTML =
+                            currentTab === 'pending' ? '<p>Нет ожидающих заявок.</p>' : '<p>Нет принятых заявок.</p>';
                         return;
                     }
 
                     let html = `<table>
-                            <tr><th>Пациент</th><th>Тема</th><th>Тип</th><th>Дата</th><th>Действия</th></tr>`;
+                        <tr><th>Пациент</th><th>Тема</th><th>Тип</th><th>Дата</th><th>Статус</th><th>Действия</th></tr>`;
                     apps.forEach(app => {
+                        const statusText = app.status === 'pending' ? 'Ожидает' :
+                            app.status === 'accepted' ? 'Принята' : 'Отклонена';
+                        const statusColor = app.status === 'pending' ? '#ffc107' :
+                            app.status === 'accepted' ? '#28a745' : '#dc3545';
                         html += `
-                                <tr>
-                                    <td>${app.patientFullName}</td>
-                                    <td>${app.subject}</td>
-                                    <td>${app.type === 'F' ? 'Бесплатная' : 'Платная'}</td>
-                                    <td>${new Date(app.createdAt).toLocaleDateString()}</td>
-                                    <td>
+                            <tr>
+                                <td>${app.patientFullName}</td>
+                                <td>${app.subject}</td>
+                                <td>${app.type === 'F' ? 'Бесплатная' : 'Платная'}</td>
+                                <td>${new Date(app.createdAt).toLocaleDateString()}</td>
+                                <td style="color:${statusColor};font-weight:bold;">${statusText}</td>
+                                <td>
+                                    ${app.status === 'pending' ? `
                                         <button class="btn-accept" onclick="acceptApp('${app.applicationId}')">Принять</button>
                                         <button class="btn-reject" onclick="rejectApp('${app.applicationId}')">Отклонить</button>
-                                    </td>
-                                </tr>`;
+                                    ` : `<span style="color:#999;">—</span>`}
+                                </td>
+                            </tr>`;
                     });
                     html += '</table>';
                     document.getElementById('appList').innerHTML = html;

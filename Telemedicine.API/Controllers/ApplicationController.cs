@@ -42,6 +42,11 @@ namespace TelemedicineSystem.API.Controllers
                 PatientId = patient.PatientId,
                 Type = dto.Type,
                 Subject = dto.Subject,
+                ConsultantId = dto.ConsultantId,
+                ConsultationDate = dto.ConsultationDate.HasValue
+                    ? DateTime.SpecifyKind(dto.ConsultationDate.Value.AddHours(-3), DateTimeKind.Utc)
+                    : null,
+                Description = dto.Description,
                 Status = "pending",
                 CreatedAt = DateTime.UtcNow
             };
@@ -166,6 +171,38 @@ namespace TelemedicineSystem.API.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Заявка отклонена" });
+        }
+
+        // 6. Принятые заявки консультанта
+        [HttpGet("my-consultant")]
+        [Authorize(Roles = "Consultant")]
+        public async Task<IActionResult> GetMyConsultantApplications()
+        {
+            var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+
+            var consultant = await _context.Consultants
+                .FirstOrDefaultAsync(c => c.UserId == userId);
+
+            if (consultant == null)
+                return NotFound("Консультант не найден");
+
+            var applications = await _context.Applications
+                .Include(a => a.Patient)
+                .Where(a => a.ConsultantId == consultant.ConsultantId && a.Status == "accepted")
+                .OrderByDescending(a => a.CreatedAt)
+                .Select(a => new ApplicationDto
+                {
+                    ApplicationId = a.ApplicationId,
+                    PatientId = a.PatientId,
+                    PatientFullName = a.Patient.Surname + " " + a.Patient.Name + " " + a.Patient.MiddleName,
+                    Type = a.Type,
+                    Subject = a.Subject,
+                    Status = a.Status,
+                    CreatedAt = a.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(applications);
         }
     }
 }

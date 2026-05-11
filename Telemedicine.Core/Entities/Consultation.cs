@@ -1,49 +1,55 @@
-﻿using System;
+﻿using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-using System.Reflection.Metadata;
 using Telemedicine.Core.Entities;
+using TelemedicineSystem.Core.Entities;
 
-namespace TelemedicineSystem.Core.Entities
+[Table("consultations")]
+public class Consultation
 {
-    public class Consultation
-    {
-        [Key]
-        public Guid ConsultationId { get; set; }
+    [Key]
+    [Column("consultationid")]
+    public Guid ConsultationId { get; set; }
 
-        [Required]
-        public Guid ApplicationId { get; set; }
+    [Required]
+    [Column("applicationid")]
+    public Guid ApplicationId { get; set; }
 
-        [Required]
-        public Guid PatientId { get; set; }
+    [Required]
+    [Column("patientid")]
+    public Guid PatientId { get; set; }
 
-        [Required]
-        public Guid ConsultantId { get; set; }
+    [Required]
+    [Column("consultantid")]
+    public Guid ConsultantId { get; set; }
 
-        public DateTime Date { get; set; }
+    [Column("date")]  // ← было без атрибута, добавляем
+    public DateTime Date { get; set; }
 
-        public double? Cost { get; set; }
+    [Column("cost")]
+    public double? Cost { get; set; }
 
-        [MaxLength(100)]
-        public string PayOrder { get; set; }
+    [MaxLength(100)]
+    [Column("payorder")]
+    public string PayOrder { get; set; }
 
-        public long? ContractNumber { get; set; }
+    [Column("contractnumber")]
+    public long? ContractNumber { get; set; }
 
-        [Required]
-        [MaxLength(20)]
-        public string Status { get; set; } // scheduled, in_progress, completed, cancelled
+    [Required]
+    [MaxLength(20)]
+    [Column("status")]
+    public string Status { get; set; }
 
-        // Навигационные свойства
-        [ForeignKey("ApplicationId")]
-        public Application Application { get; set; }
+    // Навигационные свойства
+    [ForeignKey("ApplicationId")]
+    public Application Application { get; set; }
 
-        [ForeignKey("PatientId")]
-        public Patient Patient { get; set; }
+    [ForeignKey("PatientId")]
+    public Patient Patient { get; set; }
 
-        [ForeignKey("ConsultantId")]
-        public Consultant Consultant { get; set; }
+    [ForeignKey("ConsultantId")]
+    public Consultant Consultant { get; set; }
 
-        public ICollection<Entry> Entries { get; set; }
-        public ICollection<Document> Documents { get; set; }
-    }
+    public ICollection<Entry> Entries { get; set; }
+    public ICollection<Document> Documents { get; set; }
 }
