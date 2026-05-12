@@ -499,7 +499,52 @@
                 document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
             }
         }
+        async function showMedicalBook() {
+            document.getElementById('content').innerHTML = `
+        <div class="card">
+            <h3>📄 Медицинская карта</h3>
+            <div id="medBookContent">Загрузка...</div>
+            <button onclick="loadUserData()" style="margin-top:15px;background:#667eea;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">
+                ← Назад
+            </button>
+        </div>`;
 
+            try {
+                const response = await fetch(`${API_URL}/api/MedicalBook/my`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const book = await response.json();
+                    let html = '';
+
+                    if (!book.entries || book.entries.length === 0) {
+                        html += '<p>В вашей медкарте пока нет записей.</p>';
+                    } else {
+                        book.entries.forEach(entry => {
+                            html += `
+                        <div style="background:#f8f9fa;border-radius:8px;padding:15px;margin-bottom:10px;border-left:4px solid #667eea;">
+                            <p><strong>📅 Дата:</strong> ${new Date(entry.createdAt).toLocaleDateString()}</p>
+                            <p><strong>👨‍⚕️ Врач:</strong> ${entry.consultantFullName} (${entry.specialty})</p>
+                            ${entry.conclusion ? `<p><strong>📝 Заключение:</strong> ${entry.conclusion}</p>` : ''}
+                            ${entry.meds ? `<p><strong>💊 Медикаменты:</strong> ${entry.meds}</p>` : ''}
+                            ${entry.procedures ? `<p><strong>🏥 Процедуры:</strong> ${entry.procedures}</p>` : ''}
+                            ${entry.recommendations ? `<p><strong>📋 Рекомендации:</strong> ${entry.recommendations}</p>` : ''}
+                            ${entry.treatmentStart ? `<p><strong>🟢 Начало лечения:</strong> ${new Date(entry.treatmentStart).toLocaleDateString()}</p>` : ''}
+                            ${entry.treatmentEnd ? `<p><strong>🔴 Окончание лечения:</strong> ${new Date(entry.treatmentEnd).toLocaleDateString()}</p>` : ''}
+                            ${entry.causeOfAnEnd ? `<p><strong>📝 Причина завершения:</strong> ${entry.causeOfAnEnd}</p>` : ''}
+                        </div>`;
+                        });
+                    }
+
+                    document.getElementById('medBookContent').innerHTML = html;
+                } else {
+                    document.getElementById('medBookContent').innerHTML = '<p style="color:red;">Ошибка загрузки медкарты.</p>';
+                }
+            } catch (err) {
+                document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
+            }
+        }
         // ===== ЗАГРУЗКА ДАННЫХ ПОЛЬЗОВАТЕЛЯ =====
 
         async function loadUserData() {
@@ -591,7 +636,7 @@
                         <h4>📋 Мои заявки</h4>
                         <p>История обращений</p>
                     </div>
-                    <div class="menu-item" onclick="alert('Функция в разработке')">
+                    <div class="menu-item" onclick="showMedicalBook()">
                         <h4>📄 Медицинская карта</h4>
                         <p>Просмотр результатов</p>
                     </div>`;

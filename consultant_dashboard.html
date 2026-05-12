@@ -74,71 +74,75 @@
             border-bottom: 1px solid #eee;
         }
 
-        .btn-accept {
-            background: #28a745;
-            color: white;
+        .btn {
             border: none;
             padding: 5px 15px;
             border-radius: 3px;
             cursor: pointer;
             margin-right: 5px;
+            color: white;
+        }
+
+        .btn-accept {
+            background: #28a745;
         }
 
         .btn-reject {
             background: #dc3545;
-            color: white;
+        }
+
+        .btn-view {
+            background: #667eea;
+        }
+
+        .btn-entry {
+            background: #ff9800;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .tab-btn {
+            padding: 8px 20px;
             border: none;
-            padding: 5px 15px;
-            border-radius: 3px;
+            border-radius: 5px;
             cursor: pointer;
+            background: #f5f5f5;
         }
 
-        .btn-accept:hover {
-            background: #218838;
+            .tab-btn.active {
+                background: #11998e;
+                color: white;
+            }
+
+        textarea, input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 10px;
         }
 
-        .btn-reject:hover {
-            background: #c82333;
-        }
-
-        .status {
-            font-weight: bold;
-        }
-
-        .status-pending {
-            color: #ffc107;
-        }
-
-        .status-accepted {
-            color: #28a745;
-        }
-
-        .status-rejected {
-            color: #dc3545;
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
         }
     </style>
 </head>
 <body>
     <header>
         <div class="logo">🏥 Телемедицина - Кабинет консультанта</div>
-        <button class="logout-btn" onclick="logout()">Выйти</button>
-    </header>
-    <div class="container">
-        <div class="card">
-            <h3>📋 Заявки на консультацию</h3>
-            <div style="margin-bottom:15px;display:flex;gap:10px;">
-                <button id="tab-pending" class="tab-btn" onclick="switchTab('pending')"
-                        style="padding:8px 20px;border:none;border-radius:5px;cursor:pointer;background:#11998e;color:white;">
-                    Ожидающие
-                </button>
-                <button id="tab-accepted" class="tab-btn" onclick="switchTab('accepted')"
-                        style="padding:8px 20px;border:none;border-radius:5px;cursor:pointer;background:#f5f5f5;">
-                    Принятые
-                </button>
-            </div>
-            <div id="appList">Загрузка...</div>
+        <div>
+            <button onclick="showPage('applications')" class="btn btn-accept">Заявки</button>
+            <button onclick="showPage('patients')" class="btn btn-view">Пациенты</button>
+            <button class="logout-btn" onclick="logout()">Выйти</button>
         </div>
-    </div>
+    </header>
+    <div class="container" id="mainContent"></div>
 
     <script>
         const API_URL = 'https://localhost:7189';
@@ -146,68 +150,67 @@
         const role = localStorage.getItem('role');
         let currentTab = 'pending';
 
-        if (!token || role !== 'Consultant') {
-            window.location.href = 'login.html';
+        if (!token || role !== 'Consultant') window.location.href = 'login.html';
+
+        function logout() { localStorage.clear(); window.location.href = 'login.html'; }
+
+        // ===== НАВИГАЦИЯ =====
+        function showPage(page) {
+            if (page === 'applications') showApplications();
+            else if (page === 'patients') showPatients();
         }
 
-        function logout() {
-            localStorage.clear();
-            window.location.href = 'login.html';
+        // ===== ЗАЯВКИ =====
+        function showApplications() {
+            document.getElementById('mainContent').innerHTML = `
+                    <div class="card">
+                        <h3>📋 Заявки на консультацию</h3>
+                        <div class="tabs">
+                            <button class="tab-btn active" onclick="switchTab('pending')">Ожидающие</button>
+                            <button class="tab-btn" onclick="switchTab('accepted')">Принятые</button>
+                        </div>
+                        <div id="appList">Загрузка...</div>
+                    </div>`;
+            currentTab = 'pending';
+            loadApplications();
         }
 
         function switchTab(tab) {
             currentTab = tab;
-            document.querySelectorAll('.tab-btn').forEach(b => b.style.background = '#f5f5f5');
-            document.getElementById('tab-' + tab).style.background = '#11998e';
-            document.getElementById('tab-' + tab).style.color = 'white';
+            document.querySelectorAll('.tab-btn').forEach((b, i) => {
+                b.classList.toggle('active', (i === 0 && tab === 'pending') || (i === 1 && tab === 'accepted'));
+            });
             loadApplications();
         }
 
         async function loadApplications() {
             document.getElementById('appList').innerHTML = 'Загрузка...';
             try {
-                const url = currentTab === 'pending'
-                    ? `${API_URL}/api/Application/all`
-                    : `${API_URL}/api/Application/my-consultant`;
-
-                const response = await fetch(url, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
+                const url = currentTab === 'pending' ? `${API_URL}/api/Application/all` : `${API_URL}/api/Application/my-consultant`;
+                const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
                     const apps = await response.json();
                     if (apps.length === 0) {
-                        document.getElementById('appList').innerHTML =
-                            currentTab === 'pending' ? '<p>Нет ожидающих заявок.</p>' : '<p>Нет принятых заявок.</p>';
+                        document.getElementById('appList').innerHTML = currentTab === 'pending' ? '<p>Нет ожидающих заявок.</p>' : '<p>Нет принятых заявок.</p>';
                         return;
                     }
-
-                    let html = `<table>
-                        <tr><th>Пациент</th><th>Тема</th><th>Тип</th><th>Дата</th><th>Статус</th><th>Действия</th></tr>`;
+                    let html = `<table><tr><th>Пациент</th><th>Тема</th><th>Тип</th><th>Дата</th><th>Статус</th><th>Действия</th></tr>`;
                     apps.forEach(app => {
-                        const statusText = app.status === 'pending' ? 'Ожидает' :
-                            app.status === 'accepted' ? 'Принята' : 'Отклонена';
-                        const statusColor = app.status === 'pending' ? '#ffc107' :
-                            app.status === 'accepted' ? '#28a745' : '#dc3545';
-                        html += `
-                            <tr>
-                                <td>${app.patientFullName}</td>
-                                <td>${app.subject}</td>
+                        const st = app.status === 'pending' ? 'Ожидает' : 'Принята';
+                        const sc = app.status === 'pending' ? '#ffc107' : '#28a745';
+                        html += `<tr>
+                                <td>${app.patientFullName}</td><td>${app.subject}</td>
                                 <td>${app.type === 'F' ? 'Бесплатная' : 'Платная'}</td>
                                 <td>${new Date(app.createdAt).toLocaleDateString()}</td>
-                                <td style="color:${statusColor};font-weight:bold;">${statusText}</td>
-                                <td>
-                                    ${app.status === 'pending' ? `
-                                        <button class="btn-accept" onclick="acceptApp('${app.applicationId}')">Принять</button>
-                                        <button class="btn-reject" onclick="rejectApp('${app.applicationId}')">Отклонить</button>
-                                    ` : `<span style="color:#999;">—</span>`}
-                                </td>
-                            </tr>`;
+                                <td style="color:${sc};font-weight:bold;">${st}</td>
+                                <td>${app.status === 'pending' ?
+                                `<button class="btn btn-accept" onclick="acceptApp('${app.applicationId}')">Принять</button>
+                                     <button class="btn btn-reject" onclick="rejectApp('${app.applicationId}')">Отклонить</button>` :
+                                `<button class="btn btn-entry" onclick="showAddEntry('${app.patientId}','${app.applicationId}','${app.patientFullName}')">Запись</button>`}
+                                </td></tr>`;
                     });
                     html += '</table>';
                     document.getElementById('appList').innerHTML = html;
-                } else {
-                    document.getElementById('appList').innerHTML = '<p style="color:red;">Ошибка загрузки заявок.</p>';
                 }
             } catch (err) {
                 document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
@@ -215,42 +218,131 @@
         }
 
         async function acceptApp(appId) {
-            try {
-                const response = await fetch(`${API_URL}/api/Application/${appId}/accept`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (response.ok) {
-                    alert('Заявка принята! Консультация создана.');
-                    loadApplications();
-                } else {
-                    const error = await response.text();
-                    alert('Ошибка: ' + error);
-                }
-            } catch (err) {
-                alert('Ошибка соединения: ' + err.message);
-            }
+            const r = await fetch(`${API_URL}/api/Application/${appId}/accept`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+            if (r.ok) loadApplications(); else alert('Ошибка');
         }
-
         async function rejectApp(appId) {
+            const r = await fetch(`${API_URL}/api/Application/${appId}/reject`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+            if (r.ok) loadApplications(); else alert('Ошибка');
+        }
+
+        // ===== ПАЦИЕНТЫ =====
+        async function showPatients() {
+            document.getElementById('mainContent').innerHTML = `
+                    <div class="card"><h3>👥 Мои пациенты</h3><div id="patientList">Загрузка...</div></div>`;
             try {
-                const response = await fetch(`${API_URL}/api/Application/${appId}/reject`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                const response = await fetch(`${API_URL}/api/MedicalBook/my-patients`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
-                    alert('Заявка отклонена.');
-                    loadApplications();
-                } else {
-                    const error = await response.text();
-                    alert('Ошибка: ' + error);
+                    const patients = await response.json();
+                    if (patients.length === 0) {
+                        document.getElementById('patientList').innerHTML = '<p>У вас пока нет пациентов.</p>';
+                        return;
+                    }
+                    let html = `<table><tr><th>ФИО</th><th>Дата рождения</th><th>Пол</th><th>Действия</th></tr>`;
+                    patients.forEach(p => {
+                        html += `<tr>
+                                <td>${p.fullName}</td>
+                                <td>${new Date(p.dateOfBirth).toLocaleDateString()}</td>
+                                <td>${p.gender === 'Male' ? 'Мужской' : 'Женский'}</td>
+                                <td>
+                                    <button class="btn btn-view" onclick="showPatientMedicalBook('${p.patientId}','${p.fullName}')">Медкарта</button>
+                                </td></tr>`;
+                    });
+                    html += '</table>';
+                    document.getElementById('patientList').innerHTML = html;
                 }
             } catch (err) {
-                alert('Ошибка соединения: ' + err.message);
+                document.getElementById('patientList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
             }
         }
 
-        loadApplications();
+        async function showPatientMedicalBook(patientId, fullName) {
+            document.getElementById('mainContent').innerHTML = `
+                    <div class="card"><h3>📄 Медкарта: ${fullName}</h3><div id="medBookContent">Загрузка...</div>
+                    <button onclick="showPatients()" style="margin-top:15px;" class="btn btn-view">← Назад к пациентам</button></div>`;
+            try {
+                const response = await fetch(`${API_URL}/api/MedicalBook/patient/${patientId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (response.ok) {
+                    const book = await response.json();
+                    let html = '';
+                    if (!book.entries || book.entries.length === 0) {
+                        html += '<p>Записей пока нет.</p>';
+                    } else {
+                        book.entries.forEach(entry => {
+                            html += `
+                                    <div style="background:#f8f9fa;border-radius:8px;padding:15px;margin-bottom:10px;border-left:4px solid #ff9800;">
+                                        <p><strong>📅 Дата:</strong> ${new Date(entry.createdAt).toLocaleDateString()}</p>
+                                        <p><strong>👨‍⚕️ Врач:</strong> ${entry.consultantFullName}</p>
+                                        ${entry.conclusion ? `<p><strong>📝 Заключение:</strong> ${entry.conclusion}</p>` : ''}
+                                        ${entry.meds ? `<p><strong>💊 Медикаменты:</strong> ${entry.meds}</p>` : ''}
+                                        ${entry.procedures ? `<p><strong>🏥 Процедуры:</strong> ${entry.procedures}</p>` : ''}
+                                        ${entry.recommendations ? `<p><strong>📋 Рекомендации:</strong> ${entry.recommendations}</p>` : ''}
+                                    </div>`;
+                        });
+                    }
+                    document.getElementById('medBookContent').innerHTML = html;
+                }
+            } catch (err) {
+                document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
+            }
+        }
+
+        // ===== ФОРМА ЗАПИСИ =====
+        function showAddEntry(patientId, consultationId, patientFullName) {
+            document.getElementById('mainContent').innerHTML = `
+                    <div class="card">
+                        <h3>📝 Новая запись в медкарту</h3>
+                        <p><strong>Пациент:</strong> ${patientFullName}</p>
+                        <form id="entryForm">
+                            <label>Заключение:</label>
+                            <input type="text" id="conclusion" required>
+                            <label>Медикаменты:</label>
+                            <textarea id="meds" rows="2"></textarea>
+                            <label>Процедуры:</label>
+                            <textarea id="procs" rows="2"></textarea>
+                            <label>Рекомендации:</label>
+                            <textarea id="recs" rows="2"></textarea>
+                            <div style="display:flex;gap:10px;">
+                                <button type="submit" class="btn btn-accept">Сохранить запись</button>
+                                <button type="button" onclick="showApplications()" class="btn btn-reject">Отмена</button>
+                            </div>
+                        </form>
+                        <div id="entryResult" style="margin-top:15px;"></div>
+                    </div>`;
+
+            document.getElementById('entryForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const body = {
+                    patientId: patientId,
+                    applicationId: applicationId,
+                    conclusion: document.getElementById('conclusion').value,
+                    meds: document.getElementById('meds').value,
+                    procedures: document.getElementById('procs').value,
+                    recommendations: document.getElementById('recs').value,
+                    causeOfAnEnd: "",
+                    treatmentStart: null,
+                    treatmentEnd: null
+                };
+                try {
+                    const response = await fetch(`${API_URL}/api/MedicalBook/entry`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    });
+                    if (response.ok) {
+                        document.getElementById('entryResult').innerHTML = '<div style="background:#d4edda;color:#155724;padding:15px;border-radius:5px;">✅ Запись сохранена!</div>';
+                        document.getElementById('entryForm').reset();
+                    } else {
+                        document.getElementById('entryResult').innerHTML = '<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ Ошибка сохранения</div>';
+                    }
+                } catch (err) {
+                    document.getElementById('entryResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ ${err.message}</div>`;
+                }
+            });
+        }
+
+        // Старт
+        showApplications();
     </script>
 </body>
 </html>
