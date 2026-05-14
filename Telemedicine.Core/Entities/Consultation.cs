@@ -30,7 +30,7 @@ public class Consultation
 
     [MaxLength(100)]
     [Column("payorder")]
-    public string PayOrder { get; set; }
+    public string? PayOrder { get; set; }
 
     [Column("contractnumber")]
     public long? ContractNumber { get; set; }

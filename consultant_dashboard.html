@@ -288,29 +288,29 @@
         }
 
         // ===== ФОРМА ЗАПИСИ =====
-        function showAddEntry(patientId, consultationId, patientFullName) {
+        function showAddEntry(patientId, applicationId, patientFullName) {
             document.getElementById('mainContent').innerHTML = `
-                    <div class="card">
-                        <h3>📝 Новая запись в медкарту</h3>
-                        <p><strong>Пациент:</strong> ${patientFullName}</p>
-                        <form id="entryForm">
-                            <label>Заключение:</label>
-                            <input type="text" id="conclusion" required>
-                            <label>Медикаменты:</label>
-                            <textarea id="meds" rows="2"></textarea>
-                            <label>Процедуры:</label>
-                            <textarea id="procs" rows="2"></textarea>
-                            <label>Рекомендации:</label>
-                            <textarea id="recs" rows="2"></textarea>
-                            <div style="display:flex;gap:10px;">
-                                <button type="submit" class="btn btn-accept">Сохранить запись</button>
-                                <button type="button" onclick="showApplications()" class="btn btn-reject">Отмена</button>
-                            </div>
-                        </form>
-                        <div id="entryResult" style="margin-top:15px;"></div>
-                    </div>`;
+        <div class="card">
+            <h3>📝 Новая запись в медкарту</h3>
+            <p><strong>Пациент:</strong> ${patientFullName}</p>
+            <form id="entryForm">
+                <label>Заключение:</label>
+                <input type="text" id="conclusion" required>
+                <label>Медикаменты:</label>
+                <textarea id="meds" rows="2"></textarea>
+                <label>Процедуры:</label>
+                <textarea id="procs" rows="2"></textarea>
+                <label>Рекомендации:</label>
+                <textarea id="recs" rows="2"></textarea>
+                <div style="display:flex;gap:10px;">
+                    <button type="submit" class="btn btn-accept">Сохранить запись</button>
+                    <button type="button" onclick="showApplications()" class="btn btn-reject">Отмена</button>
+                </div>
+            </form>
+            <div id="entryResult" style="margin-top:15px;"></div>
+        </div>`;
 
-            document.getElementById('entryForm').addEventListener('submit', async (e) => {
+            document.getElementById('entryForm').onsubmit = async function (e) {
                 e.preventDefault();
                 const body = {
                     patientId: patientId,
@@ -338,9 +338,8 @@
                 } catch (err) {
                     document.getElementById('entryResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ ${err.message}</div>`;
                 }
-            });
+            };
         }
-
         // Старт
         showApplications();
     </script>
