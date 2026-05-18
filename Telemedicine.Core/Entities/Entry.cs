@@ -1,7 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Reflection.Metadata;
 using Telemedicine.Core.Entities;
 
 namespace TelemedicineSystem.Core.Entities
@@ -17,6 +17,9 @@ namespace TelemedicineSystem.Core.Entities
         [Column("medicalbookid")]
         public Guid MedicalBookId { get; set; }
 
+        [Column("treatment_course_id")]
+        public Guid? TreatmentCourseId { get; set; }
+
         [Column("consultationid")]
         public Guid? ConsultationId { get; set; }
 
@@ -24,27 +27,14 @@ namespace TelemedicineSystem.Core.Entities
         [Column("consultantid")]
         public Guid ConsultantId { get; set; }
 
-        [Column("meds")]
-        public string Meds { get; set; }
+        [Column("disease_id")]
+        public Guid? DiseaseId { get; set; }
 
         [Column("conclusion")]
-        public string Conclusion { get; set; }
-
-        [Column("procedures")]
-        public string Procedures { get; set; }
+        public string? Conclusion { get; set; }
 
         [Column("recommendations")]
-        public string Recommendations { get; set; }
-
-        [Column("treatmentstart")]
-        public DateTime? TreatmentStart { get; set; }
-
-        [Column("treatmentend")]
-        public DateTime? TreatmentEnd { get; set; }
-
-        [MaxLength(200)]
-        [Column("causeofanend")]
-        public string CauseOfAnEnd { get; set; }
+        public string? Recommendations { get; set; }
 
         [Column("createdat")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -53,12 +43,21 @@ namespace TelemedicineSystem.Core.Entities
         [ForeignKey("MedicalBookId")]
         public MedicalBook MedicalBook { get; set; }
 
+        [ForeignKey("TreatmentCourseId")]
+        public TreatmentCourse TreatmentCourse { get; set; }
+
         [ForeignKey("ConsultationId")]
-        public Consultation Consultation { get; set; }
+        public Consultation? Consultation { get; set; }
 
         [ForeignKey("ConsultantId")]
         public Consultant Consultant { get; set; }
 
+        [ForeignKey("DiseaseId")]
+        public Disease? Disease { get; set; }
+
         public ICollection<Document> Documents { get; set; }
+        public ICollection<EntryMedication> EntryMedications { get; set; }
+        public ICollection<EntryProcedure> EntryProcedures { get; set; }
+        public ICollection<EntryAnalysis> EntryAnalyses { get; set; }
     }
 }
