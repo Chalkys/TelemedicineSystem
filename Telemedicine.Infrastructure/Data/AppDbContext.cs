@@ -19,6 +19,14 @@ namespace Telemedicine.Infrastructure.Data
         public DbSet<MedicalBook> MedicalBooks { get; set; }
         public DbSet<Entry> Entries { get; set; }
         public DbSet<Document> Documents { get; set; }
+        public DbSet<TreatmentCourse> TreatmentCourses { get; set; }
+        public DbSet<Disease> Diseases { get; set; }
+        public DbSet<Medication> Medications { get; set; }
+        public DbSet<Procedure> Procedures { get; set; }
+        public DbSet<Analysis> Analyses { get; set; }
+        public DbSet<EntryMedication> EntryMedications { get; set; }
+        public DbSet<EntryProcedure> EntryProcedures { get; set; }
+        public DbSet<EntryAnalysis> EntryAnalyses { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -75,6 +83,51 @@ namespace Telemedicine.Infrastructure.Data
                 .HasMany(c => c.Documents)
                 .WithOne(d => d.Consultation)
                 .HasForeignKey(d => d.ConsultationId);
+
+            // TreatmentCourse → Entries (1:many)
+            modelBuilder.Entity<TreatmentCourse>()
+                .HasMany(t => t.Entries)
+                .WithOne(e => e.TreatmentCourse)
+                .HasForeignKey(e => e.TreatmentCourseId);
+
+            // Entry → EntryMedication (1:many)
+            modelBuilder.Entity<EntryMedication>()
+                .HasOne(em => em.Entry)
+                .WithMany(e => e.EntryMedications)
+                .HasForeignKey(em => em.EntryId);
+
+            modelBuilder.Entity<EntryMedication>()
+                .HasOne(em => em.Medication)
+                .WithMany()
+                .HasForeignKey(em => em.MedicationId);
+
+            // Entry → EntryProcedure (1:many)
+            modelBuilder.Entity<EntryProcedure>()
+                .HasOne(ep => ep.Entry)
+                .WithMany(e => e.EntryProcedures)
+                .HasForeignKey(ep => ep.EntryId);
+
+            modelBuilder.Entity<EntryProcedure>()
+                .HasOne(ep => ep.Procedure)
+                .WithMany()
+                .HasForeignKey(ep => ep.ProcedureId);
+
+            // Entry → EntryAnalysis (1:many)
+            modelBuilder.Entity<EntryAnalysis>()
+                .HasOne(ea => ea.Entry)
+                .WithMany(e => e.EntryAnalyses)
+                .HasForeignKey(ea => ea.EntryId);
+
+            modelBuilder.Entity<EntryAnalysis>()
+                .HasOne(ea => ea.Analysis)
+                .WithMany()
+                .HasForeignKey(ea => ea.AnalysisId);
+
+            // Entry → Disease (many:1)
+            modelBuilder.Entity<Entry>()
+                .HasOne(e => e.Disease)
+                .WithMany()
+                .HasForeignKey(e => e.DiseaseId);
         }
     }
 }
