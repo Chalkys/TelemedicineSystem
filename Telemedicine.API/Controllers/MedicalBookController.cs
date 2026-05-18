@@ -176,16 +176,23 @@ namespace TelemedicineSystem.API.Controllers
             _context.Entries.Add(entry);
             await _context.SaveChangesAsync();
 
-            // Копируем медикаменты из предыдущей записи или добавляем новые
-            if (dto.MedicationIds != null && dto.MedicationIds.Any())
+            // Обработка медикаментов
+            if (dto.Medications != null && dto.Medications.Any())
             {
-                foreach (var medId in dto.MedicationIds)
+                foreach (var med in dto.Medications)
                 {
+                    // Если дозировка или частота новые — обновляем справочник
+                    var medication = await _context.Medications.FindAsync(med.MedicationId);
+                    if (medication != null && !string.IsNullOrEmpty(med.Dosage))
+                        medication.Dosage = med.Dosage;
+                    if (medication != null && !string.IsNullOrEmpty(med.Frequency))
+                        medication.Frequency = med.Frequency;
+
                     _context.EntryMedications.Add(new EntryMedication
                     {
                         EntryMedicationId = Guid.NewGuid(),
                         EntryId = entry.EntryId,
-                        MedicationId = medId
+                        MedicationId = med.MedicationId
                     });
                 }
             }
@@ -432,9 +439,16 @@ namespace TelemedicineSystem.API.Controllers
         public Guid? DiseaseId { get; set; }
         public string? Conclusion { get; set; }
         public string? Recommendations { get; set; }
-        public List<Guid>? MedicationIds { get; set; }
+        public List<MedicationEntryDto>? Medications { get; set; }
         public List<Guid>? ProcedureIds { get; set; }
         public List<Guid>? AnalysisIds { get; set; }
+    }
+
+    public class MedicationEntryDto
+    {
+        public Guid MedicationId { get; set; }
+        public string? Dosage { get; set; }
+        public string? Frequency { get; set; }
     }
 
     public class CompleteCourseDto

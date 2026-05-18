@@ -499,6 +499,7 @@
                 document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
             }
         }
+
         async function showMedicalBook() {
             document.getElementById('content').innerHTML = `
         <div class="card">
@@ -515,25 +516,44 @@
                 });
 
                 if (response.ok) {
-                    const book = await response.json();
+                    const data = await response.json();
                     let html = '';
 
-                    if (!book.entries || book.entries.length === 0) {
+                    if (!data.courses || data.courses.length === 0) {
                         html += '<p>В вашей медкарте пока нет записей.</p>';
                     } else {
-                        book.entries.forEach(entry => {
+                        data.courses.forEach(course => {
                             html += `
-                        <div style="background:#f8f9fa;border-radius:8px;padding:15px;margin-bottom:10px;border-left:4px solid #667eea;">
-                            <p><strong>📅 Дата:</strong> ${new Date(entry.createdAt).toLocaleDateString()}</p>
-                            <p><strong>👨‍⚕️ Врач:</strong> ${entry.consultantFullName} (${entry.specialty})</p>
-                            ${entry.conclusion ? `<p><strong>📝 Заключение:</strong> ${entry.conclusion}</p>` : ''}
-                            ${entry.meds ? `<p><strong>💊 Медикаменты:</strong> ${entry.meds}</p>` : ''}
-                            ${entry.procedures ? `<p><strong>🏥 Процедуры:</strong> ${entry.procedures}</p>` : ''}
-                            ${entry.recommendations ? `<p><strong>📋 Рекомендации:</strong> ${entry.recommendations}</p>` : ''}
-                            ${entry.treatmentStart ? `<p><strong>🟢 Начало лечения:</strong> ${new Date(entry.treatmentStart).toLocaleDateString()}</p>` : ''}
-                            ${entry.treatmentEnd ? `<p><strong>🔴 Окончание лечения:</strong> ${new Date(entry.treatmentEnd).toLocaleDateString()}</p>` : ''}
-                            ${entry.causeOfAnEnd ? `<p><strong>📝 Причина завершения:</strong> ${entry.causeOfAnEnd}</p>` : ''}
-                        </div>`;
+                        <div style="background:#e8f5e9;border-radius:10px;padding:20px;margin-bottom:15px;border-left:5px solid ${course.status === 'active' ? '#28a745' : '#ff9800'};">
+                            <h4 style="color:#333;margin-bottom:10px;">
+                                📋 Курс лечения
+                                <span style="color:${course.status === 'active' ? '#28a745' : '#ff9800'};font-size:14px;">
+                                    (${course.status === 'active' ? 'Активен' : 'Завершён'})
+                                </span>
+                            </h4>
+                            <p><strong>👨‍⚕️ Врач:</strong> ${course.consultantFullName} (${course.specialty})</p>
+                            <p><strong>📅 Начат:</strong> ${new Date(course.startDate).toLocaleDateString()}</p>
+                            ${course.endDate ? `<p><strong>📅 Завершён:</strong> ${new Date(course.endDate).toLocaleDateString()}</p>` : ''}
+                            ${course.historyCode ? `<p><strong>🔢 Код истории:</strong> ${course.historyCode}</p>` : ''}
+                            ${course.causeOfEnd ? `<p><strong>📝 Причина завершения:</strong> ${course.causeOfEnd}</p>` : ''}
+                            <p style="margin-top:10px;font-weight:500;">Записи:</p>`;
+
+                            course.entries.forEach(entry => {
+                                html += `
+                            <div style="background:white;border-radius:8px;padding:12px;margin:8px 0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                                <p><strong>📅 ${new Date(entry.createdAt).toLocaleDateString()}</strong></p>
+                                ${entry.disease ? `<p>🏥 МКБ-10: <strong>${entry.disease.mkbCode}</strong> — ${entry.disease.name}</p>` : ''}
+                                ${entry.conclusion ? `<p>📝 Заключение: ${entry.conclusion}</p>` : ''}
+                                ${entry.medications && entry.medications.length > 0 ?
+                                        `<p>💊 Медикаменты: ${entry.medications.map(m => `${m.name} (${m.dosage || '—'}, ${m.frequency || '—'})`).join('; ')}</p>` : ''}
+                                ${entry.procedures && entry.procedures.length > 0 ?
+                                        `<p>🏥 Процедуры: ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
+                                ${entry.analyses && entry.analyses.length > 0 ?
+                                        `<p>🔬 Анализы: ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
+                                ${entry.recommendations ? `<p>📋 Рекомендации: ${entry.recommendations}</p>` : ''}
+                            </div>`;
+                            });
+                            html += `</div>`;
                         });
                     }
 

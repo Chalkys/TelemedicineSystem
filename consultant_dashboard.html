@@ -24,6 +24,8 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .container {
@@ -45,19 +47,6 @@
                 margin-bottom: 15px;
             }
 
-        .logout-btn {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-
-            .logout-btn:hover {
-                background: #c82333;
-            }
-
         table {
             width: 100%;
             border-collapse: collapse;
@@ -72,15 +61,17 @@
         td {
             padding: 10px;
             border-bottom: 1px solid #eee;
+            vertical-align: top;
         }
 
         .btn {
             border: none;
-            padding: 5px 15px;
-            border-radius: 3px;
+            padding: 8px 16px;
+            border-radius: 5px;
             cursor: pointer;
-            margin-right: 5px;
+            margin: 2px;
             color: white;
+            font-size: 13px;
         }
 
         .btn-accept {
@@ -97,6 +88,12 @@
 
         .btn-entry {
             background: #ff9800;
+        }
+
+        .btn-sm {
+            background: #17a2b8;
+            padding: 4px 10px;
+            font-size: 12px;
         }
 
         .tabs {
@@ -118,7 +115,7 @@
                 color: white;
             }
 
-        textarea, input, select {
+        input, textarea, select {
             width: 100%;
             padding: 10px;
             border: 1px solid #ddd;
@@ -130,6 +127,15 @@
             display: block;
             margin-bottom: 5px;
             font-weight: 500;
+        }
+
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -149,12 +155,20 @@
         const token = localStorage.getItem('token');
         const role = localStorage.getItem('role');
         let currentTab = 'pending';
+        let dictionaries = null;
 
         if (!token || role !== 'Consultant') window.location.href = 'login.html';
-
         function logout() { localStorage.clear(); window.location.href = 'login.html'; }
 
-        // ===== НАВИГАЦИЯ =====
+        async function loadDictionaries() {
+            if (dictionaries) return dictionaries;
+            try {
+                const r = await fetch(`${API_URL}/api/MedicalBook/dictionaries`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (r.ok) { dictionaries = await r.json(); return dictionaries; }
+            } catch (e) { console.error(e); }
+            return { medications: [], procedures: [], analyses: [] };
+        }
+
         function showPage(page) {
             if (page === 'applications') showApplications();
             else if (page === 'patients') showPatients();
@@ -163,8 +177,7 @@
         // ===== ЗАЯВКИ =====
         function showApplications() {
             document.getElementById('mainContent').innerHTML = `
-                    <div class="card">
-                        <h3>📋 Заявки на консультацию</h3>
+                    <div class="card"><h3>📋 Заявки на консультацию</h3>
                         <div class="tabs">
                             <button class="tab-btn active" onclick="switchTab('pending')">Ожидающие</button>
                             <button class="tab-btn" onclick="switchTab('accepted')">Принятые</button>
@@ -185,8 +198,8 @@
 
         async function loadApplications() {
             document.getElementById('appList').innerHTML = 'Загрузка...';
+            const url = currentTab === 'pending' ? `${API_URL}/api/Application/all` : `${API_URL}/api/Application/my-consultant`;
             try {
-                const url = currentTab === 'pending' ? `${API_URL}/api/Application/all` : `${API_URL}/api/Application/my-consultant`;
                 const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
                     const apps = await response.json();
@@ -218,18 +231,17 @@
         }
 
         async function acceptApp(appId) {
-            const r = await fetch(`${API_URL}/api/Application/${appId}/accept`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
-            if (r.ok) loadApplications(); else alert('Ошибка');
+            await fetch(`${API_URL}/api/Application/${appId}/accept`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+            loadApplications();
         }
         async function rejectApp(appId) {
-            const r = await fetch(`${API_URL}/api/Application/${appId}/reject`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
-            if (r.ok) loadApplications(); else alert('Ошибка');
+            await fetch(`${API_URL}/api/Application/${appId}/reject`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+            loadApplications();
         }
 
         // ===== ПАЦИЕНТЫ =====
         async function showPatients() {
-            document.getElementById('mainContent').innerHTML = `
-                    <div class="card"><h3>👥 Мои пациенты</h3><div id="patientList">Загрузка...</div></div>`;
+            document.getElementById('mainContent').innerHTML = `<div class="card"><h3>👥 Мои пациенты</h3><div id="patientList">Загрузка...</div></div>`;
             try {
                 const response = await fetch(`${API_URL}/api/MedicalBook/my-patients`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
@@ -241,12 +253,10 @@
                     let html = `<table><tr><th>ФИО</th><th>Дата рождения</th><th>Пол</th><th>Действия</th></tr>`;
                     patients.forEach(p => {
                         html += `<tr>
-                                <td>${p.fullName}</td>
-                                <td>${new Date(p.dateOfBirth).toLocaleDateString()}</td>
+                                <td>${p.fullName}</td><td>${new Date(p.dateOfBirth).toLocaleDateString()}</td>
                                 <td>${p.gender === 'Male' ? 'Мужской' : 'Женский'}</td>
-                                <td>
-                                    <button class="btn btn-view" onclick="showPatientMedicalBook('${p.patientId}','${p.fullName}')">Медкарта</button>
-                                </td></tr>`;
+                                <td><button class="btn btn-view" onclick="showPatientMedicalBook('${p.patientId}','${p.fullName}')">Медкарта</button></td>
+                            </tr>`;
                     });
                     html += '</table>';
                     document.getElementById('patientList').innerHTML = html;
@@ -257,27 +267,41 @@
         }
 
         async function showPatientMedicalBook(patientId, fullName) {
-            document.getElementById('mainContent').innerHTML = `
-                    <div class="card"><h3>📄 Медкарта: ${fullName}</h3><div id="medBookContent">Загрузка...</div>
-                    <button onclick="showPatients()" style="margin-top:15px;" class="btn btn-view">← Назад к пациентам</button></div>`;
+            document.getElementById('mainContent').innerHTML = `<div class="card"><h3>📄 Медкарта: ${fullName}</h3><div id="medBookContent">Загрузка...</div>
+                    <button onclick="showPatients()" style="margin-top:15px;" class="btn btn-view">← Назад</button></div>`;
             try {
                 const response = await fetch(`${API_URL}/api/MedicalBook/patient/${patientId}`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
-                    const book = await response.json();
+                    const data = await response.json();
                     let html = '';
-                    if (!book.entries || book.entries.length === 0) {
+                    if (!data.courses || data.courses.length === 0) {
                         html += '<p>Записей пока нет.</p>';
                     } else {
-                        book.entries.forEach(entry => {
-                            html += `
-                                    <div style="background:#f8f9fa;border-radius:8px;padding:15px;margin-bottom:10px;border-left:4px solid #ff9800;">
-                                        <p><strong>📅 Дата:</strong> ${new Date(entry.createdAt).toLocaleDateString()}</p>
-                                        <p><strong>👨‍⚕️ Врач:</strong> ${entry.consultantFullName}</p>
-                                        ${entry.conclusion ? `<p><strong>📝 Заключение:</strong> ${entry.conclusion}</p>` : ''}
-                                        ${entry.meds ? `<p><strong>💊 Медикаменты:</strong> ${entry.meds}</p>` : ''}
-                                        ${entry.procedures ? `<p><strong>🏥 Процедуры:</strong> ${entry.procedures}</p>` : ''}
-                                        ${entry.recommendations ? `<p><strong>📋 Рекомендации:</strong> ${entry.recommendations}</p>` : ''}
+                        data.courses.forEach(course => {
+                            html += `<div style="background:#e8f5e9;border-radius:8px;padding:15px;margin-bottom:15px;border-left:4px solid #28a745;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                                        <p><strong>📋 Курс лечения</strong> (${course.status === 'active' ? 'Активен' : 'Завершён'})</p>
+                                        ${course.status === 'active' ?
+                                    `<button class="btn btn-reject" onclick="showCompleteCourse('${course.treatmentCourseId}','${patientId}','${fullName}')" style="font-size:12px;padding:5px 12px;">Завершить курс</button>`
+                                    : ''}
+                                    </div>
+                                    <p><strong>👨‍⚕️ Врач:</strong> ${course.consultantFullName}</p>
+                                    <p><strong>📅 Начат:</strong> ${new Date(course.startDate).toLocaleDateString()}</p>
+                                    ${course.endDate ? `<p><strong>📅 Завершён:</strong> ${new Date(course.endDate).toLocaleDateString()}</p>` : ''}
+                                    ${course.causeOfEnd ? `<p><strong>📝 Причина завершения:</strong> ${course.causeOfEnd}</p>` : ''}
+                                    <p style="margin-top:10px;"><strong>Записи:</strong></p>`;
+                            course.entries.forEach(entry => {
+                                html += `<div style="background:white;border-radius:5px;padding:10px;margin:5px 0;">
+                                        <p><strong>📅 ${new Date(entry.createdAt).toLocaleDateString()}</strong></p>
+                                        ${entry.conclusion ? `<p>📝 ${entry.conclusion}</p>` : ''}
+                                        ${entry.disease ? `<p>🏥 МКБ-10: ${entry.disease.mkbCode} — ${entry.disease.name}</p>` : ''}
+                                        ${entry.medications && entry.medications.length > 0 ? `<p>💊 Медикаменты: ${entry.medications.map(m => `${m.name} (${m.dosage || ''}, ${m.frequency || ''})`).join(', ')}</p>` : ''}
+                                        ${entry.procedures && entry.procedures.length > 0 ? `<p>🏥 Процедуры: ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
+                                        ${entry.analyses && entry.analyses.length > 0 ? `<p>🔬 Анализы: ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
+                                        ${entry.recommendations ? `<p>📋 Рекомендации: ${entry.recommendations}</p>` : ''}
                                     </div>`;
+                            });
+                            html += `</div>`;
                         });
                     }
                     document.getElementById('medBookContent').innerHTML = html;
@@ -287,41 +311,97 @@
             }
         }
 
-        // ===== ФОРМА ЗАПИСИ =====
-        function showAddEntry(patientId, applicationId, patientFullName) {
+        // ===== ЗАВЕРШЕНИЕ КУРСА =====
+        function showCompleteCourse(courseId, patientId, patientFullName) {
             document.getElementById('mainContent').innerHTML = `
-        <div class="card">
-            <h3>📝 Новая запись в медкарту</h3>
-            <p><strong>Пациент:</strong> ${patientFullName}</p>
-            <form id="entryForm">
-                <label>Заключение:</label>
-                <input type="text" id="conclusion" required>
-                <label>Медикаменты:</label>
-                <textarea id="meds" rows="2"></textarea>
-                <label>Процедуры:</label>
-                <textarea id="procs" rows="2"></textarea>
-                <label>Рекомендации:</label>
-                <textarea id="recs" rows="2"></textarea>
-                <div style="display:flex;gap:10px;">
-                    <button type="submit" class="btn btn-accept">Сохранить запись</button>
-                    <button type="button" onclick="showApplications()" class="btn btn-reject">Отмена</button>
-                </div>
-            </form>
-            <div id="entryResult" style="margin-top:15px;"></div>
-        </div>`;
+                    <div class="card">
+                        <h3>🏁 Завершение курса лечения</h3>
+                        <p><strong>Пациент:</strong> ${patientFullName}</p>
+                        <form id="completeForm">
+                            <label>Причина завершения (обязательно):</label>
+                            <textarea id="causeOfEnd" rows="2" required placeholder="Например: выздоровление, улучшение состояния..."></textarea>
+                            <label>Итоговое заключение:</label>
+                            <textarea id="finalConclusion" rows="2"></textarea>
+                            <label>Рекомендации:</label>
+                            <textarea id="recommendations" rows="2" placeholder="Профилактика, образ жизни..."></textarea>
+                            <div style="display:flex;gap:10px;margin-top:15px;">
+                                <button type="submit" class="btn btn-accept">Завершить курс</button>
+                                <button type="button" onclick="showPatientMedicalBook('${patientId}','${patientFullName}')" class="btn btn-reject">Отмена</button>
+                            </div>
+                        </form>
+                        <div id="completeResult" style="margin-top:15px;"></div>
+                    </div>`;
+
+            document.getElementById('completeForm').onsubmit = async function (e) {
+                e.preventDefault();
+                const body = {
+                    causeOfEnd: document.getElementById('causeOfEnd').value,
+                    finalConclusion: document.getElementById('finalConclusion').value || null,
+                    recommendations: document.getElementById('recommendations').value || null
+                };
+                try {
+                    const response = await fetch(`${API_URL}/api/MedicalBook/complete-course/${courseId}`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    });
+                    if (response.ok) {
+                        document.getElementById('completeResult').innerHTML = '<div style="background:#d4edda;color:#155724;padding:15px;border-radius:5px;">✅ Курс лечения завершён!</div>';
+                        setTimeout(() => showPatientMedicalBook(patientId, patientFullName), 1500);
+                    } else {
+                        const err = await response.text();
+                        document.getElementById('completeResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ Ошибка: ${err}</div>`;
+                    }
+                } catch (err) {
+                    document.getElementById('completeResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ ${err.message}</div>`;
+                }
+            };
+        }
+
+        // ===== ФОРМА ЗАПИСИ =====
+        async function showAddEntry(patientId, applicationId, patientFullName) {
+            const dict = await loadDictionaries();
+            document.getElementById('mainContent').innerHTML = `
+                    <div class="card">
+                        <h3>📝 Новая запись в медкарту</h3>
+                        <p><strong>Пациент:</strong> ${patientFullName}</p>
+                        <form id="entryForm">
+                            <label>Заключение:</label>
+                            <textarea id="conclusion" rows="2"></textarea>
+                            <label>МКБ-10 (предположительный код):</label>
+                            <input type="text" id="mkbSearch" placeholder="Введите код или название..." oninput="searchMkb()">
+                            <select id="diseaseId" style="display:none;"></select>
+                            <div id="mkbResults" style="margin-bottom:10px;max-height:150px;overflow-y:auto;"></div>
+                            <label>💊 Медикаменты:</label>
+                            <div id="medsContainer"></div>
+                            <button type="button" class="btn btn-sm" onclick="addMedRow()">+ Добавить лекарство</button>
+                            <div style="display:flex;gap:10px;margin-top:15px;">
+                                <button type="submit" class="btn btn-accept">Сохранить запись</button>
+                                <button type="button" onclick="showApplications()" class="btn btn-reject">Отмена</button>
+                            </div>
+                        </form>
+                        <div id="entryResult" style="margin-top:15px;"></div>
+                    </div>`;
+
+            window._entryData = { patientId, applicationId, patientFullName, dict };
+            addMedRow();
 
             document.getElementById('entryForm').onsubmit = async function (e) {
                 e.preventDefault();
+                const medications = [];
+                document.querySelectorAll('.med-row').forEach(row => {
+                    const select = row.querySelector('.med-select');
+                    const dosage = row.querySelector('.med-dosage').value;
+                    const frequency = row.querySelector('.med-frequency').value;
+                    if (select.value) {
+                        medications.push({ medicationId: select.value, dosage, frequency });
+                    }
+                });
                 const body = {
-                    patientId: patientId,
-                    applicationId: applicationId,
+                    patientId, applicationId,
                     conclusion: document.getElementById('conclusion').value,
-                    meds: document.getElementById('meds').value,
-                    procedures: document.getElementById('procs').value,
-                    recommendations: document.getElementById('recs').value,
-                    causeOfAnEnd: "",
-                    treatmentStart: null,
-                    treatmentEnd: null
+                    diseaseId: document.getElementById('diseaseId').value || null,
+                    medications: medications.length > 0 ? medications : null
                 };
                 try {
                     const response = await fetch(`${API_URL}/api/MedicalBook/entry`, {
@@ -333,14 +413,64 @@
                         document.getElementById('entryResult').innerHTML = '<div style="background:#d4edda;color:#155724;padding:15px;border-radius:5px;">✅ Запись сохранена!</div>';
                         document.getElementById('entryForm').reset();
                     } else {
-                        document.getElementById('entryResult').innerHTML = '<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ Ошибка сохранения</div>';
+                        const err = await response.text();
+                        document.getElementById('entryResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ Ошибка: ${err}</div>`;
                     }
                 } catch (err) {
                     document.getElementById('entryResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ ${err.message}</div>`;
                 }
             };
         }
-        // Старт
+
+        function onMedSelect(select) {
+            const selected = select.options[select.selectedIndex];
+            const dosage = selected.getAttribute('data-dosage') || '';
+            const frequency = selected.getAttribute('data-frequency') || '';
+            const row = select.parentElement;
+            row.querySelector('.med-dosage').value = dosage;
+            row.querySelector('.med-frequency').value = frequency;
+        }
+
+        function addMedRow() {
+            const dict = window._entryData?.dict || { medications: [] };
+            const container = document.getElementById('medsContainer');
+            const row = document.createElement('div');
+            row.className = 'med-row';
+            row.style.cssText = 'display:flex;gap:8px;align-items:end;margin-bottom:10px;flex-wrap:wrap;';
+            row.innerHTML = `
+                    <select class="med-select" style="flex:2;min-width:180px;" onchange="onMedSelect(this)">
+                        <option value="">— Выберите —</option>
+                        ${dict.medications.map(m => `<option value="${m.medicationId}" data-dosage="${m.dosage || ''}" data-frequency="${m.frequency || ''}">${m.name}</option>`).join('')}
+                    </select>
+                    <input type="text" class="med-dosage" placeholder="Дозировка" style="flex:1;min-width:120px;">
+                    <input type="text" class="med-frequency" placeholder="Кратность приёма" style="flex:1;min-width:130px;">
+                    <button type="button" class="btn btn-reject" onclick="this.parentElement.remove()" style="padding:6px 10px;font-size:12px;">✕</button>`;
+            container.appendChild(row);
+        }
+
+        async function searchMkb() {
+            const query = document.getElementById('mkbSearch').value;
+            if (query.length < 2) { document.getElementById('mkbResults').innerHTML = ''; return; }
+            try {
+                const r = await fetch(`${API_URL}/api/Mkb/search?query=${encodeURIComponent(query)}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (r.ok) {
+                    const items = await r.json();
+                    let html = '';
+                    items.forEach(item => {
+                        html += `<div onclick="selectMkb('${item.diseaseId}','${item.mkbCode}','${item.name}')" style="padding:8px;cursor:pointer;border-bottom:1px solid #eee;">
+                                <strong>${item.mkbCode}</strong> — ${item.name}</div>`;
+                    });
+                    document.getElementById('mkbResults').innerHTML = html || '<p style="color:#999;">Ничего не найдено</p>';
+                }
+            } catch (e) { }
+        }
+
+        function selectMkb(id, code, name) {
+            document.getElementById('diseaseId').value = id;
+            document.getElementById('mkbSearch').value = code + ' — ' + name;
+            document.getElementById('mkbResults').innerHTML = '';
+        }
+
         showApplications();
     </script>
 </body>
