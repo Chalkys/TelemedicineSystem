@@ -1,0 +1,348 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Консультация - Телемедицина</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f5f7fa;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .info-panel {
+            width: 280px;
+            background: white;
+            padding: 20px;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+        }
+
+            .info-panel h3 {
+                color: #333;
+                margin-bottom: 10px;
+            }
+
+            .info-panel p {
+                margin-bottom: 8px;
+                color: #555;
+                font-size: 14px;
+            }
+
+        .chat-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 10px 15px;
+            border-radius: 15px;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+            .message.mine {
+                align-self: flex-end;
+                background: #dcf8c6;
+                border-bottom-right-radius: 5px;
+            }
+
+            .message.other {
+                align-self: flex-start;
+                background: #f0f0f0;
+                border-bottom-left-radius: 5px;
+            }
+
+            .message .time {
+                font-size: 11px;
+                color: #999;
+                margin-top: 4px;
+            }
+
+        .input-area {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #e0e0e0;
+            gap: 10px;
+        }
+
+            .input-area input {
+                flex: 1;
+                padding: 10px 15px;
+                border: 1px solid #ddd;
+                border-radius: 20px;
+                outline: none;
+            }
+
+        .btn {
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            color: white;
+            font-size: 14px;
+        }
+
+        .btn-send {
+            background: #11998e;
+        }
+
+        .btn-call {
+            background: #28a745;
+        }
+
+        .btn-end {
+            background: #dc3545;
+        }
+
+        .btn-back {
+            background: #667eea;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-scheduled {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-in_progress {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-completed {
+            background: #e2e3e5;
+            color: #383d41;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div><span id="headerInfo">Консультация</span></div>
+        <div>
+            <span id="statusBadge" class="status-badge status-scheduled">Запланирована</span>
+            <button id="btnCall" class="btn btn-call" style="display:none;" onclick="startCall()">📞 Позвонить</button>
+            <button id="btnEnd" class="btn btn-end" style="display:none;" onclick="endConsultation()">Завершить</button>
+            <button class="btn btn-back" onclick="goBack()">← Назад</button>
+        </div>
+    </header>
+    <div class="container">
+        <div class="info-panel" id="infoPanel"></div>
+        <div class="chat-panel">
+            <div class="messages" id="messages"></div>
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="Введите сообщение...">
+                <button class="btn btn-send" id="btnSend">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://localhost:7189';
+        const token = localStorage.getItem('token');
+        const role = localStorage.getItem('role');
+        const consultationId = new URLSearchParams(window.location.search).get('id');
+
+        let connection;
+        let currentUserId;
+        let currentUserName = '';
+
+        function getRoleName(r) {
+            const roles = { 'Patient': 'Пациент', 'Consultant': 'Консультант', 'Operator': 'Оператор' };
+            return roles[r] || r;
+        }
+
+        async function init() {
+            if (!consultationId) { alert('Консультация не найдена'); return; }
+
+            try {
+                const r = await fetch(`${API_URL}/api/Consultation/my`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const consultations = await r.json();
+                const cons = consultations.find(c => c.consultationId === consultationId);
+                if (!cons) { alert('Консультация не найдена'); return; }
+
+                const me = await fetch(`${API_URL}/api/Users/me`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const user = await me.json();
+                currentUserId = user.userId;
+
+                // Формируем имя пользователя: для пациента из user.*, для консультанта из cons.consultantFullName
+                if (role === 'Patient') {
+                    currentUserName = (user.surname || '') + ' ' + (user.name || '');
+                    if (!currentUserName.trim()) currentUserName = user.email;
+                } else {
+                    currentUserName = cons.consultantFullName;
+                }
+
+                document.getElementById('headerInfo').textContent = `👤 ${currentUserName.trim()} (${getRoleName(role)})`;
+
+                // Собеседник
+                const otherName = role === 'Patient' ? cons.consultantFullName : cons.patientFullName;
+                const otherRole = role === 'Patient' ? 'Консультант' : 'Пациент';
+
+                document.getElementById('infoPanel').innerHTML = `
+                        <h3>${otherRole}:</h3>
+                        <p><strong>${otherName}</strong></p>
+                        ${role === 'Patient' ? `<p>${cons.consultantSpecialty}</p>` : ''}
+                        <p>📅 ${new Date(cons.date).toLocaleString()}</p>
+                        <p>📋 ${cons.subject}</p>`;
+
+                updateStatusUI(cons.status);
+
+                // Загружаем историю сообщений (currentUserId уже установлен)
+                const msgs = await fetch(`${API_URL}/api/Consultation/${consultationId}/messages`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const messages = await msgs.json();
+                messages.forEach(m => addMessage(m, m.senderId === currentUserId));
+
+                await connectSignalR();
+            } catch (e) {
+                console.error(e);
+                document.getElementById('messages').innerHTML = '<p style="color:red;">Ошибка загрузки</p>';
+            }
+
+            document.getElementById('btnSend').addEventListener('click', sendMessage);
+            document.getElementById('messageInput').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') sendMessage();
+            });
+        }
+
+        function updateStatusUI(status) {
+            const badge = document.getElementById('statusBadge');
+            badge.textContent = status === 'scheduled' ? 'Запланирована' : status === 'in_progress' ? 'Идёт' : 'Завершена';
+            badge.className = 'status-badge status-' + status;
+
+            if (role === 'Consultant' && status === 'scheduled') {
+                document.getElementById('btnCall').style.display = 'inline-block';
+            }
+            if (status === 'in_progress') {
+                document.getElementById('btnEnd').style.display = 'inline-block';
+            }
+        }
+
+        async function connectSignalR() {
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl(`${API_URL}/hubs/consultation`, { accessTokenFactory: () => token })
+                .withAutomaticReconnect()
+                .configureLogging(signalR.LogLevel.Information)
+                .build();
+
+            connection.on("ReceiveMessage", (msg) => {
+                addMessage(msg, msg.senderId === currentUserId);
+            });
+
+            connection.onreconnecting(() => console.log("Reconnecting..."));
+            connection.onreconnected(() => console.log("Reconnected!"));
+            connection.onclose(() => console.log("Connection closed"));
+
+            try {
+                await connection.start();
+                console.log("✅ SignalR connected!");
+                await connection.invoke("JoinConsultation", consultationId);
+            } catch (err) {
+                console.error("SignalR error:", err.message);
+            }
+        }
+
+        function addMessage(msg, isMine) {
+            const div = document.createElement('div');
+            div.className = 'message ' + (isMine ? 'mine' : 'other');
+            div.innerHTML = `${msg.text}<div class="time">${new Date(msg.sentAt).toLocaleTimeString()}</div>`;
+            document.getElementById('messages').appendChild(div);
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text || !connection) return;
+            try {
+                await connection.invoke("SendMessage", consultationId, text);
+                input.value = '';
+            } catch (err) {
+                console.error("Send error:", err);
+            }
+        }
+
+        async function startCall() {
+            try {
+                await fetch(`${API_URL}/api/Consultation/${consultationId}/start`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+                });
+                updateStatusUI('in_progress');
+                alert('Консультация началась! (видео будет добавлено позже)');
+            } catch (e) { console.error(e); }
+        }
+
+        async function endConsultation() {
+            if (!confirm('Завершить консультацию?')) return;
+            try {
+                await fetch(`${API_URL}/api/Consultation/${consultationId}/complete`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+                });
+                updateStatusUI('completed');
+                document.getElementById('btnEnd').style.display = 'none';
+                if (role === 'Consultant') {
+                    const cons = await fetch(`${API_URL}/api/Consultation/my`, { headers: { 'Authorization': `Bearer ${token}` } });
+                    const consultations = await cons.json();
+                    const c = consultations.find(cc => cc.consultationId === consultationId);
+                    if (c) {
+                        window.location.href = `consultant_dashboard.html?action=addEntry&consultationId=${consultationId}&applicationId=${c.applicationId}`;
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function goBack() {
+            if (role === 'Patient') window.location.href = 'dashboard.html';
+            else window.location.href = 'consultant_dashboard.html';
+        }
+
+        init();
+    </script>
+</body>
+</html>

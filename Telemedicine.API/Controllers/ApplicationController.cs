@@ -24,6 +24,7 @@ namespace TelemedicineSystem.API.Controllers
         }
 
         // 1. Создать заявку (пациент)
+        // 1. Создать заявку (пациент)
         [HttpPost("create")]
         [Authorize(Roles = "Patient")]
         public async Task<IActionResult> CreateApplication([FromBody] CreateApplicationDto dto)
@@ -47,11 +48,29 @@ namespace TelemedicineSystem.API.Controllers
                     ? DateTime.SpecifyKind(dto.ConsultationDate.Value.AddHours(-3), DateTimeKind.Utc)
                     : null,
                 Description = dto.Description,
-                Status = "pending",
+                Status = "accepted",  // ← сразу accepted
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.Applications.Add(application);
+
+            // Автоматически создаём консультацию
+            if (dto.ConsultantId.HasValue)
+            {
+                var consultation = new Consultation
+                {
+                    ConsultationId = Guid.NewGuid(),
+                    ApplicationId = application.ApplicationId,
+                    PatientId = patient.PatientId,
+                    ConsultantId = dto.ConsultantId.Value,
+                    Date = dto.ConsultationDate.HasValue
+                        ? DateTime.SpecifyKind(dto.ConsultationDate.Value.AddHours(-3), DateTimeKind.Utc)
+                        : DateTime.UtcNow,
+                    Status = "scheduled"
+                };
+                _context.Consultations.Add(consultation);
+            }
+
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Заявка создана", applicationId = application.ApplicationId });

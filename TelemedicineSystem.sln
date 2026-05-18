@@ -12,6 +12,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frontend", "Frontend", "{3E8A7C9D-4DE5-4AE5-9DCA-70FD0C06D48D}"
 	ProjectSection(SolutionItems) = preProject
 		consultant_dashboard.html = consultant_dashboard.html
+		consultation.html = consultation.html
 		dashboard.html = dashboard.html
 		forgot-password.html = forgot-password.html
 		login.html = login.html

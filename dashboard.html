@@ -455,13 +455,13 @@
 
         async function showMyApplications() {
             document.getElementById('content').innerHTML = `
-                <div class="card">
-                    <h3>📋 Мои заявки</h3>
-                    <div id="appList">Загрузка...</div>
-                    <button onclick="loadUserData()" style="margin-top:15px;background:#667eea;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">
-                        ← Назад
-                    </button>
-                </div>`;
+        <div class="card">
+            <h3>📋 Мои заявки</h3>
+            <div id="appList">Загрузка...</div>
+            <button onclick="loadUserData()" style="margin-top:15px;background:#667eea;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">
+                ← Назад
+            </button>
+        </div>`;
 
             try {
                 const response = await fetch(`${API_URL}/api/Application/my`, {
@@ -476,19 +476,24 @@
                     }
 
                     let html = '<table style="width:100%;border-collapse:collapse;">';
-                    html += '<tr style="background:#f5f5f5;"><th style="padding:10px;text-align:left;">Тема</th><th>Тип</th><th>Статус</th><th>Дата</th></tr>';
+                    html += '<tr style="background:#f5f5f5;"><th style="padding:10px;text-align:left;">Тема</th><th>Тип</th><th>Статус</th><th>Дата</th><th></th></tr>';
                     apps.forEach(app => {
                         const statusColor = app.status === 'pending' ? '#ffc107' :
                             app.status === 'accepted' ? '#28a745' : '#dc3545';
                         const statusText = app.status === 'pending' ? 'Ожидает' :
                             app.status === 'accepted' ? 'Принята' : 'Отклонена';
                         html += `
-                            <tr style="border-bottom:1px solid #eee;">
-                                <td style="padding:10px;">${app.subject}</td>
-                                <td style="padding:10px;text-align:center;">${app.type === 'F' ? 'Бесплатная' : 'Платная'}</td>
-                                <td style="padding:10px;text-align:center;color:${statusColor};font-weight:bold;">${statusText}</td>
-                                <td style="padding:10px;text-align:center;">${new Date(app.createdAt).toLocaleDateString()}</td>
-                            </tr>`;
+                    <tr style="border-bottom:1px solid #eee;">
+                        <td style="padding:10px;">${app.subject}</td>
+                        <td style="padding:10px;text-align:center;">${app.type === 'F' ? 'Бесплатная' : 'Платная'}</td>
+                        <td style="padding:10px;text-align:center;color:${statusColor};font-weight:bold;">${statusText}</td>
+                        <td style="padding:10px;text-align:center;">${new Date(app.createdAt).toLocaleDateString()}</td>
+                        <td style="padding:10px;text-align:center;">
+                            ${app.status === 'accepted' ?
+                                `<button style="background:#11998e;color:white;border:none;padding:5px 10px;border-radius:3px;cursor:pointer;" onclick="openConsultation('${app.applicationId}')">💬 Консультация</button>`
+                                : ''}
+                        </td>
+                    </tr>`;
                     });
                     html += '</table>';
                     document.getElementById('appList').innerHTML = html;
@@ -497,6 +502,21 @@
                 }
             } catch (err) {
                 document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
+            }
+        }
+
+        async function openConsultation(applicationId) {
+            try {
+                const r = await fetch(`${API_URL}/api/Consultation/my`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const consultations = await r.json();
+                const cons = consultations.find(c => c.applicationId === applicationId);
+                if (cons) {
+                    window.location.href = `consultation.html?id=${cons.consultationId}`;
+                } else {
+                    alert('Консультация ещё не создана.');
+                }
+            } catch (e) {
+                alert('Ошибка: ' + e.message);
             }
         }
 
