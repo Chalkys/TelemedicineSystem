@@ -137,6 +137,24 @@
             border-radius: 5px;
             cursor: pointer;
         }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .badge-primary {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .badge-secondary {
+            background: #e2e3e5;
+            color: #383d41;
+        }
     </style>
 </head>
 <body>
@@ -154,7 +172,7 @@
         const API_URL = 'http://192.168.0.106:5095';
         const token = localStorage.getItem('token');
         const role = localStorage.getItem('role');
-        let currentTab = 'pending';
+        let currentTab = 'new';
         let dictionaries = null;
 
         if (!token || role !== 'Consultant') window.location.href = 'login.html';
@@ -192,51 +210,89 @@
         // ===== ЗАЯВКИ =====
         function showApplications() {
             document.getElementById('mainContent').innerHTML = `
-                    <div class="card"><h3>📋 Заявки на консультацию</h3>
+                    <div class="card">
+                        <h3>📋 Заявки на консультацию</h3>
                         <div class="tabs">
-                            <button class="tab-btn active" onclick="switchTab('pending')">Ожидающие</button>
-                            <button class="tab-btn" onclick="switchTab('accepted')">Принятые</button>
+                            <button class="tab-btn active" onclick="switchTab('new')">Новые</button>
+                            <button class="tab-btn" onclick="switchTab('no-record')">Без записи</button>
+                            <button class="tab-btn" onclick="switchTab('completed')">Завершённые</button>
                         </div>
                         <div id="appList">Загрузка...</div>
                     </div>`;
-            currentTab = 'pending';
+            currentTab = 'new';
             loadApplications();
         }
 
         function switchTab(tab) {
             currentTab = tab;
             document.querySelectorAll('.tab-btn').forEach((b, i) => {
-                b.classList.toggle('active', (i === 0 && tab === 'pending') || (i === 1 && tab === 'accepted'));
+                b.classList.toggle('active',
+                    (i === 0 && tab === 'new') ||
+                    (i === 1 && tab === 'no-record') ||
+                    (i === 2 && tab === 'completed'));
             });
             loadApplications();
         }
 
         async function loadApplications() {
             document.getElementById('appList').innerHTML = 'Загрузка...';
-            const url = currentTab === 'pending' ? `${API_URL}/api/Application/all` : `${API_URL}/api/Application/my-consultant`;
+            let url, emptyMsg;
+
+            if (currentTab === 'new') {
+                url = `${API_URL}/api/Application/my-new`;
+                emptyMsg = 'Нет новых заявок.';
+            } else if (currentTab === 'no-record') {
+                url = `${API_URL}/api/Application/my-completed`;
+                emptyMsg = 'Нет консультаций без записи.';
+            } else {
+                url = `${API_URL}/api/Application/my-completed-with-record`;
+                emptyMsg = 'Нет завершённых консультаций.';
+            }
+
             try {
                 const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
                     const apps = await response.json();
-                    if (apps.length === 0) {
-                        document.getElementById('appList').innerHTML = currentTab === 'pending' ? '<p>Нет ожидающих заявок.</p>' : '<p>Нет принятых заявок.</p>';
+
+                    // Для вкладки "Без записи" — фильтруем на фронте
+                    let filteredApps = apps;
+                    if (currentTab === 'no-record') {
+                        filteredApps = apps.filter(app => !app.hasEntry);
+                    } else if (currentTab === 'completed') {
+                        filteredApps = apps.filter(app => app.hasEntry);
+                    }
+
+                    if (filteredApps.length === 0) {
+                        document.getElementById('appList').innerHTML = `<p>${emptyMsg}</p>`;
                         return;
                     }
-                    let html = `<table><tr><th>Пациент</th><th>Тема</th><th>Тип</th><th>Дата</th><th>Статус</th><th>Действия</th></tr>`;
-                    apps.forEach(app => {
-                        const st = app.status === 'pending' ? 'Ожидает' : 'Принята';
-                        const sc = app.status === 'pending' ? '#ffc107' : '#28a745';
+
+                    let html = `<table><tr><th>Пациент</th><th>Тема</th><th>Дата консультации</th><th>Приём</th><th>Статус</th><th>Действия</th></tr>`;
+                    filteredApps.forEach(app => {
+                        const st = currentTab === 'new' ? 'Ожидает звонка' :
+                            currentTab === 'no-record' ? 'Требуется запись' : 'Завершена';
+                        const sc = currentTab === 'new' ? '#ffc107' :
+                            currentTab === 'no-record' ? '#dc3545' : '#28a745';
+                        const consultDate = app.consultationDate ? new Date(app.consultationDate).toLocaleString() : '—';
+                        const isPrimary = app.isPrimary ? 'Первичный' : 'Вторичный';
+                        const badgeClass = app.isPrimary ? 'badge-primary' : 'badge-secondary';
+
+                        let actions = '';
+                        if (currentTab === 'new') {
+                            actions = `<button class="btn btn-entry" onclick="openConsultation('${app.applicationId}')">💬 Консультация</button>`;
+                        } else if (currentTab === 'no-record') {
+                            actions = `<button class="btn btn-entry" onclick="showAddEntry('${app.patientId}','${app.applicationId}','${app.patientFullName}')">Запись</button>`;
+                        } else if (currentTab === 'completed') {
+                            actions = `<button class="btn btn-view" onclick="showPatientMedicalBook('${app.patientId}','${app.patientFullName}')">Медкарта</button>`;
+                        }
+
                         html += `<tr>
-                                <td>${app.patientFullName}</td><td>${app.subject}</td>
-                                <td>${app.type === 'F' ? 'Бесплатная' : 'Платная'}</td>
-                                <td>${new Date(app.createdAt).toLocaleDateString()}</td>
+                                <td>${app.patientFullName}</td>
+                                <td>${app.subject}</td>
+                                <td>${consultDate}</td>
+                                <td><span class="badge ${badgeClass}">${isPrimary}</span></td>
                                 <td style="color:${sc};font-weight:bold;">${st}</td>
-                                <td>${app.status === 'pending' ?
-                                `<button class="btn btn-accept" onclick="acceptApp('${app.applicationId}')">Принять</button>
-                                     <button class="btn btn-reject" onclick="rejectApp('${app.applicationId}')">Отклонить</button>` :
-                                `<button class="btn btn-entry" onclick="openConsultation('${app.applicationId}')">💬 Консультация</button>
-                                 <button class="btn btn-accept" onclick="showAddEntry('${app.patientId}','${app.applicationId}','${app.patientFullName}')">Запись</button>`}
-                                </td></tr>`;
+                                <td>${actions}</td></tr>`;
                     });
                     html += '</table>';
                     document.getElementById('appList').innerHTML = html;
@@ -244,15 +300,6 @@
             } catch (err) {
                 document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
             }
-        }
-
-        async function acceptApp(appId) {
-            await fetch(`${API_URL}/api/Application/${appId}/accept`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
-            loadApplications();
-        }
-        async function rejectApp(appId) {
-            await fetch(`${API_URL}/api/Application/${appId}/reject`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
-            loadApplications();
         }
 
         // ===== ПАЦИЕНТЫ =====
@@ -428,6 +475,7 @@
                     if (response.ok) {
                         document.getElementById('entryResult').innerHTML = '<div style="background:#d4edda;color:#155724;padding:15px;border-radius:5px;">✅ Запись сохранена!</div>';
                         document.getElementById('entryForm').reset();
+                        setTimeout(() => showApplications(), 1000);
                     } else {
                         const err = await response.text();
                         document.getElementById('entryResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ Ошибка: ${err}</div>`;

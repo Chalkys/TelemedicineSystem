@@ -91,6 +91,8 @@ namespace TelemedicineSystem.API.Controllers
             return Ok(new { message = "Консультация началась" });
         }
 
+
+
         // Завершить консультацию
         [HttpPost("{consultationId}/complete")]
         [Authorize]

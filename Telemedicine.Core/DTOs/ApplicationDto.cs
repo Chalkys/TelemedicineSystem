@@ -11,5 +11,8 @@ namespace TelemedicineSystem.Core.DTOs
         public string Subject { get; set; }
         public string Status { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime? ConsultationDate { get; set; }
+        public bool IsPrimary { get; set; }
+        public bool HasEntry { get; set; }
     }
 }

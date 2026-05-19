@@ -103,7 +103,7 @@ if (app.Environment.IsDevelopment())
     app.UseDeveloperExceptionPage();
 }
 
-
+app.UseStaticFiles();
 
 // ВАЖНО: CORS должен быть ДО аутентификации!
 app.UseCors("AllowFrontend");

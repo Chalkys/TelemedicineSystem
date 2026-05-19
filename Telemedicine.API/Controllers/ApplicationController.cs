@@ -192,10 +192,10 @@ namespace TelemedicineSystem.API.Controllers
             return Ok(new { message = "Заявка отклонена" });
         }
 
-        // 6. Принятые заявки консультанта
-        [HttpGet("my-consultant")]
+        // 6. Новые заявки консультанта
+        [HttpGet("my-new")]
         [Authorize(Roles = "Consultant")]
-        public async Task<IActionResult> GetMyConsultantApplications()
+        public async Task<IActionResult> GetMyNewApplications()
         {
             var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
 
@@ -205,9 +205,11 @@ namespace TelemedicineSystem.API.Controllers
             if (consultant == null)
                 return NotFound("Консультант не найден");
 
-            var applications = await _context.Applications
+            var data = await _context.Applications
                 .Include(a => a.Patient)
-                .Where(a => a.ConsultantId == consultant.ConsultantId && a.Status == "accepted")
+                .Where(a => a.ConsultantId == consultant.ConsultantId
+                            && a.Status == "accepted"
+                            && !_context.Consultations.Any(c => c.ApplicationId == a.ApplicationId && c.Status == "completed"))
                 .OrderByDescending(a => a.CreatedAt)
                 .Select(a => new ApplicationDto
                 {
@@ -217,11 +219,130 @@ namespace TelemedicineSystem.API.Controllers
                     Type = a.Type,
                     Subject = a.Subject,
                     Status = a.Status,
-                    CreatedAt = a.CreatedAt
+                    CreatedAt = a.CreatedAt,
+                    ConsultationDate = _context.Consultations
+                        .Where(c => c.ApplicationId == a.ApplicationId)
+                        .Select(c => (DateTime?)c.Date)
+                        .FirstOrDefault(),
+                    IsPrimary = !_context.Entries
+                        .Any(e => e.TreatmentCourse.PatientId == a.PatientId
+                                  && e.TreatmentCourse.ConsultantId == consultant.ConsultantId),
+                    HasEntry = false
                 })
                 .ToListAsync();
 
-            return Ok(applications);
+            return Ok(data);
+        }
+
+        // 7. Завершённые консультации
+        [HttpGet("my-completed")]
+        [Authorize(Roles = "Consultant")]
+        public async Task<IActionResult> GetMyCompletedApplications()
+        {
+            var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+
+            var consultant = await _context.Consultants
+                .FirstOrDefaultAsync(c => c.UserId == userId);
+
+            if (consultant == null)
+                return NotFound("Консультант не найден");
+
+            // Получаем ID завершённых консультаций этого консультанта
+            var completedConsultationIds = await _context.Consultations
+                .Where(c => c.ConsultantId == consultant.ConsultantId && c.Status == "completed")
+                .Select(c => c.ConsultationId)
+                .ToListAsync();
+
+            var data = await _context.Applications
+                .Include(a => a.Patient)
+                .Where(a => a.ConsultantId == consultant.ConsultantId
+                            && _context.Consultations.Any(c => c.ApplicationId == a.ApplicationId && c.Status == "completed"))
+                .OrderByDescending(a => a.CreatedAt)
+                .ToListAsync();
+
+            var result = data.Select(a => new ApplicationDto
+            {
+                ApplicationId = a.ApplicationId,
+                PatientId = a.PatientId,
+                PatientFullName = a.Patient.Surname + " " + a.Patient.Name + " " + a.Patient.MiddleName,
+                Type = a.Type,
+                Subject = a.Subject,
+                Status = a.Status,
+                CreatedAt = a.CreatedAt,
+                ConsultationDate = _context.Consultations
+                    .Where(c => c.ApplicationId == a.ApplicationId)
+                    .Select(c => (DateTime?)c.Date)
+                    .FirstOrDefault(),
+                IsPrimary = !_context.Entries
+                    .Any(e => e.TreatmentCourse.PatientId == a.PatientId
+                              && e.TreatmentCourse.ConsultantId == consultant.ConsultantId),
+                HasEntry = _context.Entries
+                    .Any(e => e.ConsultationId != null
+                              && completedConsultationIds.Contains(e.ConsultationId.Value)
+                              && _context.Consultations
+                                  .Where(c => c.ConsultationId == e.ConsultationId.Value)
+                                  .Select(c => c.ApplicationId)
+                                  .FirstOrDefault() == a.ApplicationId)
+            }).ToList();
+
+            return Ok(result);
+        }
+
+        // 8. Завершённые консультации с записью (для вкладки "Завершённые")
+        [HttpGet("my-completed-with-record")]
+        [Authorize(Roles = "Consultant")]
+        public async Task<IActionResult> GetMyCompletedWithRecord()
+        {
+            var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+
+            var consultant = await _context.Consultants
+                .FirstOrDefaultAsync(c => c.UserId == userId);
+
+            if (consultant == null)
+                return NotFound("Консультант не найден");
+
+            var completedConsultationIds = await _context.Consultations
+                .Where(c => c.ConsultantId == consultant.ConsultantId && c.Status == "completed")
+                .Select(c => c.ConsultationId)
+                .ToListAsync();
+
+            // ID консультаций, по которым уже есть запись
+            var consultationsWithEntry = await _context.Entries
+                .Where(e => e.ConsultationId != null && completedConsultationIds.Contains(e.ConsultationId.Value))
+                .Select(e => e.ConsultationId.Value)
+                .Distinct()
+                .ToListAsync();
+
+            var applicationIds = await _context.Consultations
+                .Where(c => consultationsWithEntry.Contains(c.ConsultationId))
+                .Select(c => c.ApplicationId)
+                .ToListAsync();
+
+            var data = await _context.Applications
+                .Include(a => a.Patient)
+                .Where(a => applicationIds.Contains(a.ApplicationId))
+                .OrderByDescending(a => a.CreatedAt)
+                .Select(a => new ApplicationDto
+                {
+                    ApplicationId = a.ApplicationId,
+                    PatientId = a.PatientId,
+                    PatientFullName = a.Patient.Surname + " " + a.Patient.Name + " " + a.Patient.MiddleName,
+                    Type = a.Type,
+                    Subject = a.Subject,
+                    Status = a.Status,
+                    CreatedAt = a.CreatedAt,
+                    ConsultationDate = _context.Consultations
+                        .Where(c => c.ApplicationId == a.ApplicationId)
+                        .Select(c => (DateTime?)c.Date)
+                        .FirstOrDefault(),
+                    IsPrimary = !_context.Entries
+                        .Any(e => e.TreatmentCourse.PatientId == a.PatientId
+                                  && e.TreatmentCourse.ConsultantId == consultant.ConsultantId),
+                    HasEntry = true
+                })
+                .ToListAsync();
+
+            return Ok(data);
         }
     }
 }

@@ -172,7 +172,14 @@ namespace TelemedicineSystem.API.Controllers
                 Recommendations = dto.Recommendations ?? lastEntry?.Recommendations,
                 CreatedAt = DateTime.UtcNow
             };
-
+            // Привязываем запись к консультации, если указан ApplicationId
+            if (dto.ApplicationId.HasValue)
+            {
+                entry.ConsultationId = await _context.Consultations
+                    .Where(c => c.ApplicationId == dto.ApplicationId.Value)
+                    .Select(c => (Guid?)c.ConsultationId)
+                    .FirstOrDefaultAsync();
+            }
             _context.Entries.Add(entry);
             await _context.SaveChangesAsync();
 

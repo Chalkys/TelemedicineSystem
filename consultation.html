@@ -328,7 +328,7 @@
             if (role === 'Consultant' && status === 'scheduled') {
                 document.getElementById('btnCall').style.display = 'inline-block';
             }
-            if (status === 'in_progress') {
+            if (status === 'in_progress' && role === 'Consultant') {
                 document.getElementById('btnEnd').style.display = 'inline-block';
             }
         }
@@ -496,8 +496,8 @@
                     const cons = await fetch(`${API_URL}/api/Consultation/my`, { headers: { 'Authorization': `Bearer ${token}` } });
                     const consultations = await cons.json();
                     const c = consultations.find(cc => cc.consultationId === consultationId);
-                    if (c) {
-                        window.location.href = `consultant_dashboard.html?action=addEntry&consultationId=${consultationId}&applicationId=${c.applicationId}`;
+                    if (role === 'Consultant') {
+                        window.location.href = 'consultant_dashboard.html';
                     }
                 }
             } catch (e) { console.error(e); }
