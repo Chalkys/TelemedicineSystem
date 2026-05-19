@@ -38,7 +38,7 @@
         }
 
         .info-panel {
-            width: 280px;
+            width: 300px;
             background: white;
             padding: 20px;
             border-right: 1px solid #e0e0e0;
@@ -49,6 +49,11 @@
             .info-panel h3 {
                 color: #333;
                 margin-bottom: 10px;
+            }
+
+            .info-panel h4 {
+                color: #555;
+                margin: 15px 0 8px;
             }
 
             .info-panel p {
@@ -191,6 +196,13 @@
             background: #667eea;
         }
 
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+            background: #17a2b8;
+            border-radius: 15px;
+        }
+
         .status-badge {
             display: inline-block;
             padding: 4px 10px;
@@ -213,6 +225,20 @@
             background: #e2e3e5;
             color: #383d41;
         }
+
+        .doc-item {
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+            .doc-item a {
+                color: #11998e;
+                text-decoration: none;
+            }
+
+                .doc-item a:hover {
+                    text-decoration: underline;
+                }
     </style>
 </head>
 <body>
@@ -258,8 +284,6 @@
         let connection;
         let currentUserId;
         let currentUserName = '';
-
-        // WebRTC
         let localStream;
         let peerConnection;
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -300,7 +324,12 @@
                         <p><strong>${otherName}</strong></p>
                         ${role === 'Patient' ? `<p>${cons.consultantSpecialty}</p>` : ''}
                         <p>📅 ${new Date(cons.date).toLocaleString()}</p>
-                        <p>📋 ${cons.subject}</p>`;
+                        <p>📋 ${cons.subject}</p>
+                        <h4>📎 Документы</h4>
+                        <div id="docList"><p style="color:#999;font-size:12px;">Загрузка...</p></div>
+                        <input type="file" id="fileInput" accept=".pdf" style="display:none;" onchange="uploadDocument()">
+                        <button class="btn btn-sm" onclick="document.getElementById('fileInput').click()" style="margin-top:8px;">+ Загрузить PDF</button>
+                    `;
 
                 updateStatusUI(cons.status);
 
@@ -309,6 +338,7 @@
                 messages.forEach(m => addMessage(m, m.senderId === currentUserId));
 
                 await connectSignalR();
+                loadDocuments();
             } catch (e) {
                 console.error(e);
                 document.getElementById('messages').innerHTML = '<p style="color:red;">Ошибка загрузки</p>';
@@ -324,7 +354,6 @@
             const badge = document.getElementById('statusBadge');
             badge.textContent = status === 'scheduled' ? 'Запланирована' : status === 'in_progress' ? 'Идёт' : 'Завершена';
             badge.className = 'status-badge status-' + status;
-
             if (role === 'Consultant' && status === 'scheduled') {
                 document.getElementById('btnCall').style.display = 'inline-block';
             }
@@ -346,29 +375,20 @@
 
             connection.on("ReceiveOffer", async (offer) => {
                 console.log("📞 Incoming call");
-
-                // Сначала получаем камеру
                 try {
                     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                     document.getElementById('localVideo').srcObject = localStream;
                     document.getElementById('videoContainer').classList.add('active');
-                } catch (e) {
-                    console.log("Камера недоступна");
-                }
-
-                // Создаём peerConnection (внутри уже добавляются треки из localStream)
+                } catch (e) { console.log("Камера недоступна"); }
                 await setupPeerConnection();
-
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(offer)));
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
                 await connection.invoke("SendAnswer", consultationId, JSON.stringify(answer));
-
                 document.getElementById('btnHangup').style.display = 'inline-block';
             });
 
             connection.on("ReceiveAnswer", async (answer) => {
-                console.log("📞 Received answer");
                 if (peerConnection) {
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(answer)));
                 }
@@ -376,9 +396,7 @@
 
             connection.on("ReceiveIceCandidate", async (candidate) => {
                 if (candidate && peerConnection) {
-                    try {
-                        await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
-                    } catch (e) { console.error("ICE error:", e); }
+                    try { await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate))); } catch (e) { }
                 }
             });
 
@@ -390,79 +408,54 @@
                 await connection.start();
                 console.log("✅ SignalR connected!");
                 await connection.invoke("JoinConsultation", consultationId);
-            } catch (err) {
-                console.error("SignalR error:", err.message);
-            }
+            } catch (err) { console.error("SignalR error:", err.message); }
         }
 
-        // ===== WebRTC =====
         async function setupPeerConnection() {
             peerConnection = new RTCPeerConnection(rtcConfig);
-
             if (localStream) {
                 localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             }
-
             peerConnection.ontrack = (event) => {
                 document.getElementById('remoteVideo').srcObject = event.streams[0];
             };
-
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
                     connection.invoke("SendIceCandidate", consultationId, JSON.stringify(event.candidate));
                 }
             };
-
             peerConnection.onconnectionstatechange = () => {
-                if (peerConnection.connectionState === 'connected') {
-                    console.log("✅ WebRTC connected");
-                }
+                if (peerConnection.connectionState === 'connected') console.log("✅ WebRTC connected");
             };
         }
 
         async function startCall() {
             try {
-                // Сначала камера
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 document.getElementById('localVideo').srcObject = localStream;
                 document.getElementById('videoContainer').classList.add('active');
-
                 await fetch(`${API_URL}/api/Consultation/${consultationId}/start`, {
                     method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
                 });
                 updateStatusUI('in_progress');
-
-                // Потом peerConnection
                 await setupPeerConnection();
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 await connection.invoke("SendOffer", consultationId, JSON.stringify(offer));
-
                 document.getElementById('btnCall').style.display = 'none';
                 document.getElementById('btnHangup').style.display = 'inline-block';
-            } catch (e) {
-                console.error("Call error:", e);
-                alert('Ошибка доступа к камере/микрофону.');
-            }
+            } catch (e) { console.error(e); alert('Ошибка доступа к камере/микрофону.'); }
         }
 
         async function hangUp() {
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-                localStream = null;
-            }
+            if (peerConnection) { peerConnection.close(); peerConnection = null; }
+            if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
             document.getElementById('localVideo').srcObject = null;
             document.getElementById('remoteVideo').srcObject = null;
             document.getElementById('videoContainer').classList.remove('active');
             document.getElementById('btnHangup').style.display = 'none';
-            console.log("📴 Call ended");
         }
 
-        // ===== Чат =====
         function addMessage(msg, isMine) {
             const div = document.createElement('div');
             div.className = 'message ' + (isMine ? 'mine' : 'other');
@@ -478,9 +471,7 @@
             try {
                 await connection.invoke("SendMessage", consultationId, text);
                 input.value = '';
-            } catch (err) {
-                console.error("Send error:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         async function endConsultation() {
@@ -493,12 +484,7 @@
                 updateStatusUI('completed');
                 document.getElementById('btnEnd').style.display = 'none';
                 if (role === 'Consultant') {
-                    const cons = await fetch(`${API_URL}/api/Consultation/my`, { headers: { 'Authorization': `Bearer ${token}` } });
-                    const consultations = await cons.json();
-                    const c = consultations.find(cc => cc.consultationId === consultationId);
-                    if (role === 'Consultant') {
-                        window.location.href = 'consultant_dashboard.html';
-                    }
+                    window.location.href = 'consultant_dashboard.html';
                 }
             } catch (e) { console.error(e); }
         }
@@ -507,6 +493,64 @@
             hangUp();
             if (role === 'Patient') window.location.href = 'dashboard.html';
             else window.location.href = 'consultant_dashboard.html';
+        }
+
+        // ===== ДОКУМЕНТЫ =====
+        async function loadDocuments() {
+            try {
+                const r = await fetch(`${API_URL}/api/Consultation/${consultationId}/documents`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (r.ok) {
+                    const docs = await r.json();
+                    let html = '';
+                    if (docs.length === 0) {
+                        html = '<p style="color:#999;font-size:12px;">Нет документов</p>';
+                    } else {
+                        docs.forEach(d => {
+                            html += `<div class="doc-item">
+                                    <a href="#" onclick="downloadDoc('${d.documentId}','${d.fileName}');return false;">📄 ${d.fileName}</a>
+                                    <span style="color:#999;font-size:10px;"> ${new Date(d.uploadDate).toLocaleDateString()}</span>
+                                </div>`;
+                        });
+                    }
+                    document.getElementById('docList').innerHTML = html;
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        async function uploadDocument() {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const r = await fetch(`${API_URL}/api/Consultation/${consultationId}/upload`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}` },
+                    body: formData
+                });
+                if (r.ok) {
+                    document.getElementById('fileInput').value = '';
+                    loadDocuments();
+                } else { alert('Ошибка загрузки'); }
+            } catch (e) { console.error(e); }
+        }
+
+        function downloadDoc(docId, fileName) {
+            fetch(`${API_URL}/api/Documents/${docId}/download`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+                .then(response => response.blob())
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    window.URL.revokeObjectURL(url);
+                })
+                .catch(e => console.error('Download error:', e));
         }
 
         init();

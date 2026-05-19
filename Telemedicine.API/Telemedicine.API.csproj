@@ -24,4 +24,8 @@
     <ProjectReference Include="..\Telemedicine.Infrastructure\Telemedicine.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Uploads\" />
+  </ItemGroup>
+
 </Project>
