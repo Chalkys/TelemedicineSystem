@@ -76,7 +76,8 @@ builder.Services.AddCors(options =>
             "http://127.0.0.1:5500",
             "http://localhost:5500",
             "http://192.168.0.106:5500",
-            "http://192.168.1.10:5500"
+            "http://192.168.1.10:5500",
+            "https://suwmw5-95-27-36-221.ru.tuna.am"
         )
         .AllowAnyHeader()
         .AllowAnyMethod()

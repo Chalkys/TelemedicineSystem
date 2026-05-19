@@ -43,6 +43,7 @@
             padding: 20px;
             border-right: 1px solid #e0e0e0;
             overflow-y: auto;
+            flex-shrink: 0;
         }
 
             .info-panel h3 {
@@ -56,11 +57,58 @@
                 font-size: 14px;
             }
 
-        .chat-panel {
+        .main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .video-container {
+            display: none;
+            padding: 10px;
+            background: #1a1a2e;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            min-height: 200px;
+        }
+
+            .video-container.active {
+                display: flex;
+            }
+
+        .video-wrapper {
+            position: relative;
+            width: 320px;
+            max-width: 48%;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+            .video-wrapper video {
+                width: 100%;
+                height: auto;
+                display: block;
+            }
+
+            .video-wrapper .label {
+                position: absolute;
+                bottom: 8px;
+                left: 8px;
+                background: rgba(0,0,0,0.6);
+                color: white;
+                padding: 4px 10px;
+                border-radius: 5px;
+                font-size: 12px;
+            }
+
+        .chat-area {
             flex: 1;
             display: flex;
             flex-direction: column;
             background: white;
+            min-height: 200px;
         }
 
         .messages {
@@ -130,6 +178,11 @@
             background: #28a745;
         }
 
+        .btn-hangup {
+            background: #dc3545;
+            display: none;
+        }
+
         .btn-end {
             background: #dc3545;
         }
@@ -168,17 +221,30 @@
         <div>
             <span id="statusBadge" class="status-badge status-scheduled">Запланирована</span>
             <button id="btnCall" class="btn btn-call" style="display:none;" onclick="startCall()">📞 Позвонить</button>
-            <button id="btnEnd" class="btn btn-end" style="display:none;" onclick="endConsultation()">Завершить</button>
+            <button id="btnHangup" class="btn btn-hangup" onclick="hangUp()">📴 Завершить звонок</button>
+            <button id="btnEnd" class="btn btn-end" style="display:none;" onclick="endConsultation()">Завершить консультацию</button>
             <button class="btn btn-back" onclick="goBack()">← Назад</button>
         </div>
     </header>
     <div class="container">
         <div class="info-panel" id="infoPanel"></div>
-        <div class="chat-panel">
-            <div class="messages" id="messages"></div>
-            <div class="input-area">
-                <input type="text" id="messageInput" placeholder="Введите сообщение...">
-                <button class="btn btn-send" id="btnSend">Отправить</button>
+        <div class="main-area">
+            <div class="video-container" id="videoContainer">
+                <div class="video-wrapper">
+                    <video id="localVideo" autoplay muted playsinline></video>
+                    <div class="label">Вы</div>
+                </div>
+                <div class="video-wrapper">
+                    <video id="remoteVideo" autoplay playsinline></video>
+                    <div class="label" id="remoteLabel">Собеседник</div>
+                </div>
+            </div>
+            <div class="chat-area">
+                <div class="messages" id="messages"></div>
+                <div class="input-area">
+                    <input type="text" id="messageInput" placeholder="Введите сообщение...">
+                    <button class="btn btn-send" id="btnSend">Отправить</button>
+                </div>
             </div>
         </div>
     </div>
@@ -192,6 +258,11 @@
         let connection;
         let currentUserId;
         let currentUserName = '';
+
+        // WebRTC
+        let localStream;
+        let peerConnection;
+        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
         function getRoleName(r) {
             const roles = { 'Patient': 'Пациент', 'Consultant': 'Консультант', 'Operator': 'Оператор' };
@@ -211,7 +282,6 @@
                 const user = await me.json();
                 currentUserId = user.userId;
 
-                // Формируем имя пользователя: для пациента из user.*, для консультанта из cons.consultantFullName
                 if (role === 'Patient') {
                     currentUserName = (user.surname || '') + ' ' + (user.name || '');
                     if (!currentUserName.trim()) currentUserName = user.email;
@@ -221,9 +291,9 @@
 
                 document.getElementById('headerInfo').textContent = `👤 ${currentUserName.trim()} (${getRoleName(role)})`;
 
-                // Собеседник
                 const otherName = role === 'Patient' ? cons.consultantFullName : cons.patientFullName;
                 const otherRole = role === 'Patient' ? 'Консультант' : 'Пациент';
+                document.getElementById('remoteLabel').textContent = otherName;
 
                 document.getElementById('infoPanel').innerHTML = `
                         <h3>${otherRole}:</h3>
@@ -234,7 +304,6 @@
 
                 updateStatusUI(cons.status);
 
-                // Загружаем историю сообщений (currentUserId уже установлен)
                 const msgs = await fetch(`${API_URL}/api/Consultation/${consultationId}/messages`, { headers: { 'Authorization': `Bearer ${token}` } });
                 const messages = await msgs.json();
                 messages.forEach(m => addMessage(m, m.senderId === currentUserId));
@@ -275,6 +344,44 @@
                 addMessage(msg, msg.senderId === currentUserId);
             });
 
+            connection.on("ReceiveOffer", async (offer) => {
+                console.log("📞 Incoming call");
+
+                // Сначала получаем камеру
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    document.getElementById('localVideo').srcObject = localStream;
+                    document.getElementById('videoContainer').classList.add('active');
+                } catch (e) {
+                    console.log("Камера недоступна");
+                }
+
+                // Создаём peerConnection (внутри уже добавляются треки из localStream)
+                await setupPeerConnection();
+
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(offer)));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                await connection.invoke("SendAnswer", consultationId, JSON.stringify(answer));
+
+                document.getElementById('btnHangup').style.display = 'inline-block';
+            });
+
+            connection.on("ReceiveAnswer", async (answer) => {
+                console.log("📞 Received answer");
+                if (peerConnection) {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(answer)));
+                }
+            });
+
+            connection.on("ReceiveIceCandidate", async (candidate) => {
+                if (candidate && peerConnection) {
+                    try {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
+                    } catch (e) { console.error("ICE error:", e); }
+                }
+            });
+
             connection.onreconnecting(() => console.log("Reconnecting..."));
             connection.onreconnected(() => console.log("Reconnected!"));
             connection.onclose(() => console.log("Connection closed"));
@@ -288,6 +395,74 @@
             }
         }
 
+        // ===== WebRTC =====
+        async function setupPeerConnection() {
+            peerConnection = new RTCPeerConnection(rtcConfig);
+
+            if (localStream) {
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            }
+
+            peerConnection.ontrack = (event) => {
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+            };
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    connection.invoke("SendIceCandidate", consultationId, JSON.stringify(event.candidate));
+                }
+            };
+
+            peerConnection.onconnectionstatechange = () => {
+                if (peerConnection.connectionState === 'connected') {
+                    console.log("✅ WebRTC connected");
+                }
+            };
+        }
+
+        async function startCall() {
+            try {
+                // Сначала камера
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+                document.getElementById('videoContainer').classList.add('active');
+
+                await fetch(`${API_URL}/api/Consultation/${consultationId}/start`, {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
+                });
+                updateStatusUI('in_progress');
+
+                // Потом peerConnection
+                await setupPeerConnection();
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                await connection.invoke("SendOffer", consultationId, JSON.stringify(offer));
+
+                document.getElementById('btnCall').style.display = 'none';
+                document.getElementById('btnHangup').style.display = 'inline-block';
+            } catch (e) {
+                console.error("Call error:", e);
+                alert('Ошибка доступа к камере/микрофону.');
+            }
+        }
+
+        async function hangUp() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            document.getElementById('localVideo').srcObject = null;
+            document.getElementById('remoteVideo').srcObject = null;
+            document.getElementById('videoContainer').classList.remove('active');
+            document.getElementById('btnHangup').style.display = 'none';
+            console.log("📴 Call ended");
+        }
+
+        // ===== Чат =====
         function addMessage(msg, isMine) {
             const div = document.createElement('div');
             div.className = 'message ' + (isMine ? 'mine' : 'other');
@@ -308,18 +483,9 @@
             }
         }
 
-        async function startCall() {
-            try {
-                await fetch(`${API_URL}/api/Consultation/${consultationId}/start`, {
-                    method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
-                });
-                updateStatusUI('in_progress');
-                alert('Консультация началась! (видео будет добавлено позже)');
-            } catch (e) { console.error(e); }
-        }
-
         async function endConsultation() {
             if (!confirm('Завершить консультацию?')) return;
+            hangUp();
             try {
                 await fetch(`${API_URL}/api/Consultation/${consultationId}/complete`, {
                     method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
@@ -338,6 +504,7 @@
         }
 
         function goBack() {
+            hangUp();
             if (role === 'Patient') window.location.href = 'dashboard.html';
             else window.location.href = 'consultant_dashboard.html';
         }
