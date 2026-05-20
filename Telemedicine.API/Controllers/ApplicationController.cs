@@ -24,7 +24,6 @@ namespace TelemedicineSystem.API.Controllers
         }
 
         // 1. Создать заявку (пациент)
-        // 1. Создать заявку (пациент)
         [HttpPost("create")]
         [Authorize(Roles = "Patient")]
         public async Task<IActionResult> CreateApplication([FromBody] CreateApplicationDto dto)
@@ -100,7 +99,13 @@ namespace TelemedicineSystem.API.Controllers
                     Type = a.Type,
                     Subject = a.Subject,
                     Status = a.Status,
-                    CreatedAt = a.CreatedAt
+                    CreatedAt = a.CreatedAt,
+                    ConsultationDate = _context.Consultations
+                        .Where(c => c.ApplicationId == a.ApplicationId)
+                        .Select(c => (DateTime?)c.Date)
+                        .FirstOrDefault(),
+                    ConsultationCompleted = _context.Consultations
+                        .Any(c => c.ApplicationId == a.ApplicationId && c.Status == "completed")
                 })
                 .ToListAsync();
 

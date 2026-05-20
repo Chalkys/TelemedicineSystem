@@ -14,5 +14,6 @@ namespace TelemedicineSystem.Core.DTOs
         public DateTime? ConsultationDate { get; set; }
         public bool IsPrimary { get; set; }
         public bool HasEntry { get; set; }
+        public bool ConsultationCompleted { get; set; }
     }
 }
