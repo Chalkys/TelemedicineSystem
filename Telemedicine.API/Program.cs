@@ -76,7 +76,10 @@ builder.Services.AddCors(options =>
             "http://127.0.0.1:5500",
             "http://localhost:5500",
             "http://192.168.0.106:5500",
-            "http://192.168.1.10:5500"
+            "http://192.168.1.10:5500",
+            "https://127.0.0.1:5500",
+            "https://localhost:5500",
+            "https://192.168.0.106:5500"
         )
         .AllowAnyHeader()
         .AllowAnyMethod()
@@ -103,6 +106,8 @@ if (app.Environment.IsDevelopment())
     app.UseDeveloperExceptionPage();
 }
 
+// Перенаправляем HTTP на HTTPS заккоментированное перенаправление app.UseHttpsRedirection();
+
 app.UseStaticFiles();
 
 // ВАЖНО: CORS должен быть ДО аутентификации!
@@ -119,7 +124,7 @@ app.MapHub<ConsultationHub>("/hubs/consultation");
 // Запускаем контроллеры (обработчики API запросов)
 app.MapControllers();
 
-app.Urls.Add("https://0.0.0.0:7189");
+app.Urls.Add("https://0.0.0.0:5096");
 app.Urls.Add("http://0.0.0.0:5095");
 
 // Запускаем приложение
