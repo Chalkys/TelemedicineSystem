@@ -72,19 +72,18 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(
-            "http://127.0.0.1:5500",
-            "http://localhost:5500",
-            "http://192.168.0.106:5500",
-            "http://192.168.1.10:5500",
-            "https://127.0.0.1:5500",
-            "https://localhost:5500",
-            "https://192.168.0.106:5500",
-            "https://192.168.1.10:5500"
-        )
+        policy.SetIsOriginAllowed(origin =>
+        {
+            var uri = new Uri(origin);
+            // Разрешить localhost и любые локальные IP (192.168.x.x, 172.16-31.x.x, 10.x.x.x)
+            return uri.IsLoopback ||
+                   uri.Host.StartsWith("192.168.") ||
+                   uri.Host.StartsWith("172.") ||
+                   uri.Host.StartsWith("10.");
+        })
         .AllowAnyHeader()
         .AllowAnyMethod()
-        .AllowCredentials();  // ← обязательно для SignalR
+        .AllowCredentials();
     });
 });
 
