@@ -267,7 +267,7 @@
                         return;
                     }
 
-                    let html = `<table><tr><th>Пациент</th><th>Тема</th><th>Дата консультации</th><th>Приём</th><th>Статус</th><th>Действия</th></tr>`;
+                    let html = `<table><tr><th>Пациент</th><th>Причина обращения</th><th>Дата консультации</th><th>Приём</th><th>Статус</th><th>Действия</th></tr>`;
                     filteredApps.forEach(app => {
                         const st = currentTab === 'new' ? 'Ожидает звонка' :
                             currentTab === 'no-record' ? 'Требуется запись' : 'Завершена';
@@ -288,7 +288,7 @@
 
                         html += `<tr>
                                 <td>${app.patientFullName}</td>
-                                <td>${app.subject}</td>
+                                <td>${app.complaints || 'Причина обращения не указана'}</td>
                                 <td>${consultDate}</td>
                                 <td><span class="badge ${badgeClass}">${isPrimary}</span></td>
                                 <td style="color:${sc};font-weight:bold;">${st}</td>

@@ -42,6 +42,15 @@ namespace TelemedicineSystem.Core.Entities
         [Column("createdat")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        [Column("complaints")]
+        public string? Complaints { get; set; }
+
+        [Column("previous_diagnoses")]
+        public string? PreviousDiagnoses { get; set; }
+
+        [Column("current_medications")]
+        public string? CurrentMedications { get; set; }
+
         [ForeignKey("PatientId")]
         public Patient Patient { get; set; }
 

@@ -322,12 +322,12 @@
                         return;
                     }
 
-                    let html = `<table><tr><th>Тема</th><th>Дата консультации</th><th>Статус</th><th>Действия</th></tr>`;
+                    let html = `<table><tr><th>Причина обращения</th><th>Дата консультации</th><th>Статус</th><th>Действия</th></tr>`;
                     filtered.forEach(app => {
                         const st = tab === 'scheduled' ? 'Назначена' : 'Завершена';
                         const badge = tab === 'scheduled' ? 'badge-accepted' : 'badge-completed';
                         html += `<tr>
-                    <td>${app.subject}</td>
+                    <td>${app.complaints || 'Причина обращения не указана'}</td>
                     <td>${app.consultationDate ? new Date(app.consultationDate).toLocaleString() : new Date(app.createdAt).toLocaleDateString()}</td>
                     <td><span class="badge ${badge}">${st}</span></td>
                     <td>${tab === 'scheduled' ?
@@ -530,8 +530,16 @@
                         ${selectedReason ? `<p><strong>Причина:</strong> ${selectedReason}</p>` : ''}
                     </div>
                     <div style="margin-bottom:15px;">
-                        <label>Дополнительное описание:</label>
-                        <textarea id="appDescription" maxlength="500" rows="3" placeholder="Опишите вашу проблему подробнее..."></textarea>
+                        <label>Жалобы:</label>
+                        <textarea id="appComplaints" maxlength="500" rows="2" placeholder="Что вас беспокоит?"></textarea>
+                    </div>
+                    <div style="margin-bottom:15px;">
+                        <label>Ранее поставленные диагнозы:</label>
+                        <textarea id="appPrevDiagnoses" maxlength="500" rows="2" placeholder="Если есть — какие диагнозы вам ставили ранее?"></textarea>
+                    </div>
+                    <div style="margin-bottom:15px;">
+                        <label>Принимаемые медикаменты:</label>
+                        <textarea id="appCurrentMeds" maxlength="500" rows="2" placeholder="Какие лекарства принимаете сейчас?"></textarea>
                     </div>
                     <div style="display:flex;gap:10px;">
                         <button onclick="submitApplication('${date}T${time}:00')" class="btn btn-success">✅ Подтвердить и отправить</button>
@@ -541,13 +549,17 @@
         }
 
         async function submitApplication(dateTime) {
-            const description = document.getElementById('appDescription').value;
+            const complaints = document.getElementById('appComplaints').value;
+            const prevDiagnoses = document.getElementById('appPrevDiagnoses').value;
+            const currentMeds = document.getElementById('appCurrentMeds').value;
             const body = {
                 type: 'F',
                 subject: selectedReason || 'Консультация ' + selectedSpecialty,
                 consultantId: selectedConsultantId,
                 consultationDate: dateTime,
-                description: description
+                complaints: complaints,
+                previousDiagnoses: prevDiagnoses,
+                currentMedications: currentMeds
             };
             try {
                 const response = await fetch(`${API_URL}/api/Application/create`, {

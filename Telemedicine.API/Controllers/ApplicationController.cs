@@ -46,7 +46,9 @@ namespace TelemedicineSystem.API.Controllers
                 ConsultationDate = dto.ConsultationDate.HasValue
                     ? DateTime.SpecifyKind(dto.ConsultationDate.Value.AddHours(-3), DateTimeKind.Utc)
                     : null,
-                Description = dto.Description,
+                Complaints = dto.Complaints,
+                PreviousDiagnoses = dto.PreviousDiagnoses,
+                CurrentMedications = dto.CurrentMedications,
                 Status = "accepted",  // ← сразу accepted
                 CreatedAt = DateTime.UtcNow
             };
@@ -100,6 +102,9 @@ namespace TelemedicineSystem.API.Controllers
                     Subject = a.Subject,
                     Status = a.Status,
                     CreatedAt = a.CreatedAt,
+                    Complaints = a.Complaints,
+                    PreviousDiagnoses = a.PreviousDiagnoses,
+                    CurrentMedications = a.CurrentMedications,
                     ConsultationDate = _context.Consultations
                         .Where(c => c.ApplicationId == a.ApplicationId)
                         .Select(c => (DateTime?)c.Date)
@@ -225,6 +230,9 @@ namespace TelemedicineSystem.API.Controllers
                     Subject = a.Subject,
                     Status = a.Status,
                     CreatedAt = a.CreatedAt,
+                    Complaints = a.Complaints,
+                    PreviousDiagnoses = a.PreviousDiagnoses,
+                    CurrentMedications = a.CurrentMedications,
                     ConsultationDate = _context.Consultations
                         .Where(c => c.ApplicationId == a.ApplicationId)
                         .Select(c => (DateTime?)c.Date)
@@ -274,6 +282,9 @@ namespace TelemedicineSystem.API.Controllers
                 Subject = a.Subject,
                 Status = a.Status,
                 CreatedAt = a.CreatedAt,
+                Complaints = a.Complaints,
+                PreviousDiagnoses = a.PreviousDiagnoses,
+                CurrentMedications = a.CurrentMedications,
                 ConsultationDate = _context.Consultations
                     .Where(c => c.ApplicationId == a.ApplicationId)
                     .Select(c => (DateTime?)c.Date)
