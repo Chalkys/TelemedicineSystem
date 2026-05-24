@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Личный кабинет - Телемедицина</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -226,13 +227,14 @@
     <div class="container" id="mainContent"></div>
 
     <script>
-        const API_URL = `https://${window.location.hostname}:5096`;
+        const API_URL = 'http://192.168.0.106:5095';
         const token = localStorage.getItem('token');
         const role = localStorage.getItem('role');
         let userData = null;
+        let signalRConnection;
+        let incomingCallOffer = null;
 
         if (!token || role !== 'Patient') { window.location.href = 'login.html'; }
-
         function logout() { localStorage.clear(); window.location.href = 'login.html'; }
 
         async function loadUserData() {
@@ -247,7 +249,6 @@
         async function showPage(page) {
             const user = await loadUserData();
             if (!user) return;
-
             if (page === 'main') showMain(user);
             else if (page === 'applications') showMyApplications();
             else if (page === 'medbook') showMedicalBook();
@@ -264,32 +265,21 @@
                         ${user.contactInfo ? `<div class="info-row"><div class="info-label">Контакты:</div><div class="info-value">${user.contactInfo}</div></div>` : ''}
                     </div>
                     <div class="menu">
-                        <div class="menu-item" onclick="showCreateApplication()">
-                            <h4>📝 Создать заявку</h4>
-                            <p>Выбрать врача и время консультации</p>
-                        </div>
-                        <div class="menu-item" onclick="showMyApplications()">
-                            <h4>📋 Мои заявки</h4>
-                            <p>История обращений и консультации</p>
-                        </div>
-                        <div class="menu-item" onclick="showMedicalBook()">
-                            <h4>📄 Медицинская карта</h4>
-                            <p>Записи, назначения, документы</p>
-                        </div>
+                        <div class="menu-item" onclick="showCreateApplication()"><h4>📝 Создать заявку</h4><p>Выбрать врача и время консультации</p></div>
+                        <div class="menu-item" onclick="showMyApplications()"><h4>📋 Мои заявки</h4><p>История обращений и консультации</p></div>
+                        <div class="menu-item" onclick="showMedicalBook()"><h4>📄 Медицинская карта</h4><p>Записи, назначения, документы</p></div>
                     </div>`;
         }
 
         // ===== МОИ ЗАЯВКИ =====
         async function showMyApplications() {
             document.getElementById('mainContent').innerHTML = `
-        <div class="card">
-            <h3>📋 Мои заявки</h3>
-            <div class="tabs">
-                <button class="tab-btn active" onclick="switchPatientTab('scheduled')">Назначенные</button>
-                <button class="tab-btn" onclick="switchPatientTab('completed')">Завершённые</button>
-            </div>
-            <div id="appList">Загрузка...</div>
-        </div>`;
+                    <div class="card"><h3>📋 Мои заявки</h3>
+                        <div class="tabs">
+                            <button class="tab-btn active" onclick="switchPatientTab('scheduled')">Назначенные</button>
+                            <button class="tab-btn" onclick="switchPatientTab('completed')">Завершённые</button>
+                        </div>
+                        <div id="appList">Загрузка...</div></div>`;
             loadPatientApplications('scheduled');
         }
 
@@ -306,41 +296,30 @@
                 const response = await fetch(`${API_URL}/api/Application/my`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
                     const apps = await response.json();
-
-                    // Фильтруем на фронте: назначенные = accepted, но консультация не completed
-                    // завершённые = accepted + консультация completed
                     const filtered = apps.filter(app => {
-                        if (tab === 'scheduled') {
-                            return app.status === 'accepted' && !app.consultationCompleted;
-                        } else {
-                            return app.consultationCompleted === true;
-                        }
+                        if (tab === 'scheduled') return app.status === 'accepted' && !app.consultationCompleted;
+                        else return app.consultationCompleted === true;
                     });
-
                     if (filtered.length === 0) {
                         document.getElementById('appList').innerHTML = tab === 'scheduled' ? '<p>Нет назначенных консультаций.</p>' : '<p>Нет завершённых консультаций.</p>';
                         return;
                     }
-
                     let html = `<table><tr><th>Причина обращения</th><th>Дата консультации</th><th>Статус</th><th>Действия</th></tr>`;
                     filtered.forEach(app => {
                         const st = tab === 'scheduled' ? 'Назначена' : 'Завершена';
                         const badge = tab === 'scheduled' ? 'badge-accepted' : 'badge-completed';
                         html += `<tr>
-                    <td>${app.complaints || 'Причина обращения не указана'}</td>
-                    <td>${app.consultationDate ? new Date(app.consultationDate).toLocaleString() : new Date(app.createdAt).toLocaleDateString()}</td>
-                    <td><span class="badge ${badge}">${st}</span></td>
-                    <td>${tab === 'scheduled' ?
+                                <td>${app.complaints || 'Причина обращения не указана'}</td>
+                                <td>${app.consultationDate ? new Date(app.consultationDate).toLocaleString() : new Date(app.createdAt).toLocaleDateString()}</td>
+                                <td><span class="badge ${badge}">${st}</span></td>
+                                <td>${tab === 'scheduled' ?
                                 `<button class="btn btn-view" onclick="openConsultation('${app.applicationId}')">💬 Консультация</button>` :
-                                `<button class="btn btn-view" onclick="showMedicalBook()">📄 Медкарта</button>`}</td>
-                </tr>`;
+                                `<button class="btn btn-view" onclick="showMedicalBook()">📄 Медкарта</button>`}</td></tr>`;
                     });
                     html += '</table>';
                     document.getElementById('appList').innerHTML = html;
                 }
-            } catch (err) {
-                document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
-            }
+            } catch (err) { document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
         }
 
         async function openConsultation(applicationId) {
@@ -348,15 +327,16 @@
                 const r = await fetch(`${API_URL}/api/Consultation/my`, { headers: { 'Authorization': `Bearer ${token}` } });
                 const consultations = await r.json();
                 const cons = consultations.find(c => c.applicationId === applicationId);
-                if (cons) { window.location.href = `consultation.html?id=${cons.consultationId}`; }
-                else { alert('Консультация ещё не создана.'); }
+                if (cons) {
+                    sessionStorage.setItem('lastConsultationId', cons.consultationId);
+                    window.location.href = `consultation.html?id=${cons.consultationId}`;
+                } else { alert('Консультация ещё не создана.'); }
             } catch (e) { alert('Ошибка: ' + e.message); }
         }
 
         // ===== МЕДКАРТА =====
         async function showMedicalBook() {
-            document.getElementById('mainContent').innerHTML = `
-                    <div class="card"><h3>📄 Медицинская карта</h3><div id="medBookContent">Загрузка...</div></div>`;
+            document.getElementById('mainContent').innerHTML = `<div class="card"><h3>📄 Медицинская карта</h3><div id="medBookContent">Загрузка...</div></div>`;
             try {
                 const response = await fetch(`${API_URL}/api/MedicalBook/my`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
@@ -389,19 +369,13 @@
                     }
                     document.getElementById('medBookContent').innerHTML = html;
                 }
-            } catch (err) {
-                document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
-            }
+            } catch (err) { document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
         }
 
         // ===== СОЗДАНИЕ ЗАЯВКИ =====
         function showCreateApplication() {
             document.getElementById('mainContent').innerHTML = `
-                    <div class="card">
-                        <h3>📝 Новая заявка на консультацию</h3>
-                        <p style="color:#666;margin-bottom:20px;">Выберите способ поиска консультанта:</p>
-                        <div id="stepContainer"></div>
-                    </div>`;
+                    <div class="card"><h3>📝 Новая заявка на консультацию</h3><p style="color:#666;margin-bottom:20px;">Выберите способ поиска консультанта:</p><div id="stepContainer"></div></div>`;
             showStep1();
         }
 
@@ -416,18 +390,12 @@
 
         async function showCommonReasons() {
             const reasons = [
-                { subject: "Головная боль", specialty: "Невролог" },
-                { subject: "Боль в спине", specialty: "Невролог" },
-                { subject: "Повышенное давление", specialty: "Кардиолог" },
-                { subject: "Боль в сердце", specialty: "Кардиолог" },
-                { subject: "Кашель, простуда", specialty: "Терапевт" },
-                { subject: "Проблемы с желудком", specialty: "Гастроэнтеролог" },
-                { subject: "Сыпь на коже", specialty: "Дерматолог" },
-                { subject: "Аллергия", specialty: "Аллерголог" },
-                { subject: "Тревога, стресс", specialty: "Психотерапевт" },
-                { subject: "Боль в суставах", specialty: "Ревматолог" },
-                { subject: "Проблемы со зрением", specialty: "Офтальмолог" },
-                { subject: "Боль в ухе", specialty: "ЛОР" }
+                { subject: "Головная боль", specialty: "Невролог" }, { subject: "Боль в спине", specialty: "Невролог" },
+                { subject: "Повышенное давление", specialty: "Кардиолог" }, { subject: "Боль в сердце", specialty: "Кардиолог" },
+                { subject: "Кашель, простуда", specialty: "Терапевт" }, { subject: "Проблемы с желудком", specialty: "Гастроэнтеролог" },
+                { subject: "Сыпь на коже", specialty: "Дерматолог" }, { subject: "Аллергия", specialty: "Аллерголог" },
+                { subject: "Тревога, стресс", specialty: "Психотерапевт" }, { subject: "Боль в суставах", specialty: "Ревматолог" },
+                { subject: "Проблемы со зрением", specialty: "Офтальмолог" }, { subject: "Боль в ухе", specialty: "ЛОР" }
             ];
             let html = `<h4 style="margin-bottom:15px;">Выберите причину обращения:</h4>`;
             reasons.forEach(r => {
@@ -444,26 +412,24 @@
             selectedReason = '';
             document.getElementById('stepContainer').innerHTML = '<p>Загрузка специальностей...</p>';
             try {
-                const response = await fetch(`${API_URL}/api/Consultant/specializations`, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (response.ok) {
-                    const specs = await response.json();
+                const r = await fetch(`${API_URL}/api/Consultant/specializations`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (r.ok) {
+                    const specs = await r.json();
                     let html = `<h4 style="margin-bottom:15px;">Выберите специальность:</h4>`;
-                    specs.forEach(spec => {
-                        html += `<div class="menu-item" onclick="showConsultantsBySpecialty('${spec}')" style="margin-bottom:10px;text-align:left;padding:15px;"><strong>🏥 ${spec}</strong></div>`;
-                    });
+                    specs.forEach(s => { html += `<div class="menu-item" onclick="showConsultantsBySpecialty('${s}')" style="margin-bottom:10px;text-align:left;padding:15px;"><strong>🏥 ${s}</strong></div>`; });
                     html += `<button onclick="showStep1()" style="margin-top:15px;background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">← Назад</button>`;
                     document.getElementById('stepContainer').innerHTML = html;
                 }
-            } catch (err) { document.getElementById('stepContainer').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
+            } catch (e) { }
         }
 
         async function showConsultantsBySpecialty(specialty) {
             selectedSpecialty = specialty;
             document.getElementById('stepContainer').innerHTML = '<p>Загрузка консультантов...</p>';
             try {
-                const response = await fetch(`${API_URL}/api/Consultant/list?specialty=${encodeURIComponent(specialty)}`, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (response.ok) {
-                    const consultants = await response.json();
+                const r = await fetch(`${API_URL}/api/Consultant/list?specialty=${encodeURIComponent(specialty)}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (r.ok) {
+                    const consultants = await r.json();
                     if (consultants.length === 0) {
                         document.getElementById('stepContainer').innerHTML = `<p>Нет доступных консультантов.</p><button onclick="showStep1()" style="margin-top:15px;background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">← Назад</button>`;
                         return;
@@ -476,20 +442,15 @@
                     html += `<button onclick="showStep1()" style="margin-top:15px;background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">← Назад</button>`;
                     document.getElementById('stepContainer').innerHTML = html;
                 }
-            } catch (err) { document.getElementById('stepContainer').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
+            } catch (e) { }
         }
 
         async function showSlots(consultantId, consultantName, specialty) {
-            selectedConsultantId = consultantId;
-            selectedConsultantName = consultantName;
-            selectedSpecialty = specialty;
+            selectedConsultantId = consultantId; selectedConsultantName = consultantName; selectedSpecialty = specialty;
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('stepContainer').innerHTML = `
                     <h4 style="margin-bottom:15px;">👨‍⚕️ ${consultantName} (${specialty})</h4>
-                    <div style="margin-bottom:15px;">
-                        <label>Выберите дату:</label>
-                        <input type="date" id="slotDate" min="${today}" value="${today}" onchange="loadSlots('${consultantId}')">
-                    </div>
+                    <div style="margin-bottom:15px;"><label>Выберите дату:</label><input type="date" id="slotDate" min="${today}" value="${today}" onchange="loadSlots('${consultantId}')"></div>
                     <div id="slotsContainer"><p>Загрузка слотов...</p></div>
                     <button onclick="showStep1()" style="margin-top:15px;background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">← Назад</button>`;
             loadSlots(consultantId);
@@ -498,24 +459,20 @@
         async function loadSlots(consultantId) {
             const date = document.getElementById('slotDate').value;
             try {
-                const response = await fetch(`${API_URL}/api/Consultant/${consultantId}/slots?date=${date}`, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (response.ok) {
-                    const slots = await response.json();
+                const r = await fetch(`${API_URL}/api/Consultant/${consultantId}/slots?date=${date}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (r.ok) {
+                    const slots = await r.json();
                     let html = '<h5>Доступное время:</h5><div style="display:flex;flex-wrap:wrap;gap:10px;">';
-                    let hasAvailable = false;
-                    slots.forEach(slot => {
-                        if (slot.available) {
-                            hasAvailable = true;
-                            html += `<div onclick="showConfirm('${slot.time}')" style="padding:10px 15px;background:#667eea;color:white;border-radius:5px;cursor:pointer;min-width:80px;text-align:center;">${slot.time}</div>`;
-                        } else {
-                            html += `<div style="padding:10px 15px;background:#eee;color:#999;border-radius:5px;min-width:80px;text-align:center;text-decoration:line-through;">${slot.time}</div>`;
-                        }
+                    let has = false;
+                    slots.forEach(s => {
+                        if (s.available) { has = true; html += `<div onclick="showConfirm('${s.time}')" style="padding:10px 15px;background:#667eea;color:white;border-radius:5px;cursor:pointer;min-width:80px;text-align:center;">${s.time}</div>`; }
+                        else { html += `<div style="padding:10px 15px;background:#eee;color:#999;border-radius:5px;min-width:80px;text-align:center;text-decoration:line-through;">${s.time}</div>`; }
                     });
-                    if (!hasAvailable) html += '<p>Нет свободных слотов на эту дату.</p>';
+                    if (!has) html += '<p>Нет свободных слотов.</p>';
                     html += '</div>';
                     document.getElementById('slotsContainer').innerHTML = html;
                 }
-            } catch (err) { document.getElementById('slotsContainer').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
+            } catch (e) { }
         }
 
         function showConfirm(time) {
@@ -523,67 +480,92 @@
             document.getElementById('stepContainer').innerHTML = `
                     <h4>✅ Подтверждение заявки</h4>
                     <div style="background:#f0f4ff;padding:15px;border-radius:8px;margin-bottom:15px;">
-                        <p><strong>Консультант:</strong> ${selectedConsultantName}</p>
-                        <p><strong>Специальность:</strong> ${selectedSpecialty}</p>
-                        <p><strong>Дата:</strong> ${new Date(date).toLocaleDateString()}</p>
-                        <p><strong>Время:</strong> ${time}</p>
+                        <p><strong>Консультант:</strong> ${selectedConsultantName}</p><p><strong>Специальность:</strong> ${selectedSpecialty}</p>
+                        <p><strong>Дата:</strong> ${new Date(date).toLocaleDateString()}</p><p><strong>Время:</strong> ${time}</p>
                         ${selectedReason ? `<p><strong>Причина:</strong> ${selectedReason}</p>` : ''}
                     </div>
-                    <div style="margin-bottom:15px;">
-                        <label>Жалобы:</label>
-                        <textarea id="appComplaints" maxlength="500" rows="2" placeholder="Что вас беспокоит?"></textarea>
-                    </div>
-                    <div style="margin-bottom:15px;">
-                        <label>Ранее поставленные диагнозы:</label>
-                        <textarea id="appPrevDiagnoses" maxlength="500" rows="2" placeholder="Если есть — какие диагнозы вам ставили ранее?"></textarea>
-                    </div>
-                    <div style="margin-bottom:15px;">
-                        <label>Принимаемые медикаменты:</label>
-                        <textarea id="appCurrentMeds" maxlength="500" rows="2" placeholder="Какие лекарства принимаете сейчас?"></textarea>
-                    </div>
+                    <div style="margin-bottom:15px;"><label>Жалобы:</label><textarea id="appComplaints" maxlength="500" rows="2" placeholder="Что вас беспокоит?"></textarea></div>
+                    <div style="margin-bottom:15px;"><label>Ранее поставленные диагнозы:</label><textarea id="appPrevDiagnoses" maxlength="500" rows="2" placeholder="Если есть — какие диагнозы вам ставили ранее?"></textarea></div>
+                    <div style="margin-bottom:15px;"><label>Принимаемые медикаменты:</label><textarea id="appCurrentMeds" maxlength="500" rows="2" placeholder="Какие лекарства принимаете сейчас?"></textarea></div>
                     <div style="display:flex;gap:10px;">
-                        <button onclick="submitApplication('${date}T${time}:00')" class="btn btn-success">✅ Подтвердить и отправить</button>
+                        <button onclick="submitApplication('${date}T${time}:00')" class="btn btn-success">✅ Отправить</button>
                         <button onclick="showSlots('${selectedConsultantId}','${selectedConsultantName}','${selectedSpecialty}')" class="btn" style="background:#999;">← Назад</button>
                     </div>
                     <div id="appResult" style="margin-top:15px;"></div>`;
         }
 
         async function submitApplication(dateTime) {
-            const complaints = document.getElementById('appComplaints').value;
-            const prevDiagnoses = document.getElementById('appPrevDiagnoses').value;
-            const currentMeds = document.getElementById('appCurrentMeds').value;
             const body = {
-                type: 'F',
-                subject: selectedReason || 'Консультация ' + selectedSpecialty,
-                consultantId: selectedConsultantId,
-                consultationDate: dateTime,
-                complaints: complaints,
-                previousDiagnoses: prevDiagnoses,
-                currentMedications: currentMeds
+                type: 'F', subject: selectedReason || 'Консультация ' + selectedSpecialty,
+                consultantId: selectedConsultantId, consultationDate: dateTime,
+                complaints: document.getElementById('appComplaints').value,
+                previousDiagnoses: document.getElementById('appPrevDiagnoses').value,
+                currentMedications: document.getElementById('appCurrentMeds').value
             };
             try {
-                const response = await fetch(`${API_URL}/api/Application/create`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                if (response.ok) {
-                    document.getElementById('appResult').innerHTML = `
-                            <div style="background:#d4edda;color:#155724;padding:15px;border-radius:5px;">
-                                ✅ Заявка создана!<br><br>
-                                <a href="#" onclick="showMyApplications()" style="color:#155724;text-decoration:underline;">Посмотреть мои заявки</a>
-                            </div>`;
+                const r = await fetch(`${API_URL}/api/Application/create`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                if (r.ok) {
+                    document.getElementById('appResult').innerHTML = `<div style="background:#d4edda;color:#155724;padding:15px;border-radius:5px;">✅ Заявка создана!<br><br><a href="#" onclick="showMyApplications()" style="color:#155724;">Посмотреть мои заявки</a></div>`;
                 } else {
-                    const error = await response.text();
-                    document.getElementById('appResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ Ошибка: ${error}</div>`;
+                    const err = await r.text();
+                    document.getElementById('appResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ ${err}</div>`;
                 }
-            } catch (err) {
-                document.getElementById('appResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ ${err.message}</div>`;
-            }
+            } catch (e) { document.getElementById('appResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ ${e.message}</div>`; }
         }
 
-        // Старт
+        // ===== SIGNALR ДЛЯ ВХОДЯЩИХ ЗВОНКОВ =====
+        async function connectPatientSignalR() {
+            signalRConnection = new signalR.HubConnectionBuilder()
+                .withUrl(`${API_URL}/hubs/consultation`, { accessTokenFactory: () => token })
+                .withAutomaticReconnect()
+                .build();
+
+            signalRConnection.on("IncomingCall", (data) => {
+                console.log("📞 Incoming call from:", data.callerName);
+                sessionStorage.setItem('incomingConsultationId', data.consultationId);
+                sessionStorage.setItem('incomingCallerName', data.callerName);
+                showIncomingCallModal();
+            });
+
+            try {
+                await signalRConnection.start();
+                console.log("✅ Patient SignalR connected");
+            } catch (err) { console.error("Patient SignalR error:", err.message); }
+        }
+
+        function showIncomingCallModal() {
+            const modal = document.createElement('div');
+            modal.id = 'incomingCallModal';
+            modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;justify-content:center;align-items:center;z-index:9999;';
+            modal.innerHTML = `
+                    <div style="background:white;border-radius:15px;padding:30px;text-align:center;max-width:400px;">
+                        <h3 style="margin-bottom:15px;">📞 Входящий звонок</h3>
+                        <p style="margin-bottom:20px;color:#555;">Звонит: ${sessionStorage.getItem('incomingCallerName') || 'Консультант'}</p>
+                        <div style="display:flex;gap:15px;justify-content:center;">
+                            <button onclick="acceptIncomingCall()" style="background:#28a745;color:white;border:none;padding:15px 30px;border-radius:30px;font-size:16px;cursor:pointer;">✅ Принять</button>
+                            <button onclick="rejectIncomingCall()" style="background:#dc3545;color:white;border:none;padding:15px 30px;border-radius:30px;font-size:16px;cursor:pointer;">❌ Отклонить</button>
+                        </div>
+                    </div>`;
+            document.body.appendChild(modal);
+        }
+
+        function rejectIncomingCall() {
+            document.getElementById('incomingCallModal')?.remove();
+            if (signalRConnection) {
+                const cid = sessionStorage.getItem('incomingConsultationId') || '';
+                signalRConnection.invoke("SendMessage", cid, "❌ Пациент отклонил звонок").catch(() => { });
+            }
+            incomingCallOffer = null;
+        }
+
+        function acceptIncomingCall() {
+            document.getElementById('incomingCallModal')?.remove();
+            const cid = sessionStorage.getItem('incomingConsultationId') || sessionStorage.getItem('lastConsultationId') || '';
+            window.location.href = 'consultation.html?id=' + cid;
+        }
+
         showPage('main');
+        connectPatientSignalR();
     </script>
 </body>
 </html>

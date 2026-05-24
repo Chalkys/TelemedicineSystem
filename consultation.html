@@ -203,6 +203,12 @@
             border-radius: 15px;
         }
 
+        .btn-accept {
+            background: #28a745;
+            padding: 10px 20px;
+            border-radius: 5px;
+        }
+
         .status-badge {
             display: inline-block;
             padding: 4px 10px;
@@ -239,6 +245,50 @@
                 .doc-item a:hover {
                     text-decoration: underline;
                 }
+
+        .entry-form-container {
+            padding: 15px;
+            border-top: 1px solid #e0e0e0;
+            background: #fafafa;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+
+            .entry-form-container textarea,
+            .entry-form-container input[type="text"] {
+                width: 100%;
+                padding: 8px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                margin-bottom: 8px;
+                font-family: 'Segoe UI', sans-serif;
+            }
+
+            .entry-form-container label {
+                display: block;
+                margin-bottom: 3px;
+                font-weight: 500;
+                font-size: 13px;
+            }
+
+        .ec-referral-row {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+            .ec-referral-row input,
+            .ec-referral-row textarea {
+                width: 100%;
+                padding: 6px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                margin-bottom: 6px;
+                font-size: 12px;
+                font-family: 'Segoe UI', sans-serif;
+            }
+       
     </style>
 </head>
 <body>
@@ -266,17 +316,43 @@
                 </div>
             </div>
             <div class="chat-area">
+                <button id="btnToggleEntry" class="btn btn-sm" style="display:none;margin:5px 15px;" onclick="toggleEntryForm()">📝 Запись в медкарту</button>
                 <div class="messages" id="messages"></div>
                 <div class="input-area">
                     <input type="text" id="messageInput" placeholder="Введите сообщение...">
                     <button class="btn btn-send" id="btnSend">Отправить</button>
                 </div>
             </div>
+            <div class="entry-form-container" id="entryFormContainer" style="display:none;">
+                <h4 style="margin-bottom:10px;">📝 Заполнение записи</h4>
+
+                <label>Причина обращения (жалобы):</label>
+                <textarea id="ecComplaints" rows="2" placeholder="Что беспокоит пациента?"></textarea>
+
+                <label>Ранее поставленные диагнозы:</label>
+                <textarea id="ecPrevDiagnoses" rows="2" placeholder="Диагнозы из анамнеза"></textarea>
+
+                <label>Принимаемые медикаменты:</label>
+                <textarea id="ecCurrentMeds" rows="2" placeholder="Какие лекарства принимает?"></textarea>
+
+                <label>Предварительный диагноз (включая МКБ-10):</label>
+                <textarea id="ecConclusion" rows="2" placeholder="Ваше заключение и код МКБ-10"></textarea>
+
+                <label>🔬 Направления на анализ:</label>
+                <div id="ecReferralsContainer"></div>
+                <button type="button" class="btn btn-sm" onclick="addEcReferralRow()" style="margin-bottom:10px;">+ Направление на анализ</button>
+
+                <div style="display:flex;gap:10px;">
+                    <button class="btn btn-accept" onclick="saveEntryToSession()">💾 Сохранить в черновик</button>
+                    <button class="btn btn-sm" onclick="toggleEntryForm()">Свернуть</button>
+                </div>
+                <div id="ecSaveStatus" style="margin-top:8px;font-size:13px;"></div>
+            </div>
         </div>
     </div>
 
     <script>
-        const API_URL = `https://${window.location.hostname}:5096`;
+        const API_URL = 'http://192.168.0.106:5095';
         const token = localStorage.getItem('token');
         const role = localStorage.getItem('role');
         const consultationId = new URLSearchParams(window.location.search).get('id');
@@ -286,21 +362,21 @@
         let currentUserName = '';
         let localStream;
         let peerConnection;
+        let thisCons = null;
+        let isCallActive = false;
+        let pendingOffer = null;
+        let ecDictionaries = null;
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-        function getRoleName(r) {
-            const roles = { 'Patient': 'Пациент', 'Consultant': 'Консультант', 'Operator': 'Оператор' };
-            return roles[r] || r;
-        }
+        function getRoleName(r) { const roles = { 'Patient': 'Пациент', 'Consultant': 'Консультант', 'Operator': 'Оператор' }; return roles[r] || r; }
 
         async function init() {
             if (!consultationId) { alert('Консультация не найдена'); return; }
-
             try {
                 const r = await fetch(`${API_URL}/api/Consultation/my`, { headers: { 'Authorization': `Bearer ${token}` } });
                 const consultations = await r.json();
-                const cons = consultations.find(c => c.consultationId === consultationId);
-                if (!cons) { alert('Консультация не найдена'); return; }
+                thisCons = consultations.find(c => c.consultationId === consultationId);
+                if (!thisCons) { alert('Консультация не найдена'); return; }
 
                 const me = await fetch(`${API_URL}/api/Users/me`, { headers: { 'Authorization': `Bearer ${token}` } });
                 const user = await me.json();
@@ -310,43 +386,67 @@
                     currentUserName = (user.surname || '') + ' ' + (user.name || '');
                     if (!currentUserName.trim()) currentUserName = user.email;
                 } else {
-                    currentUserName = cons.consultantFullName;
+                    currentUserName = thisCons.consultantFullName;
                 }
-
                 document.getElementById('headerInfo').textContent = `👤 ${currentUserName.trim()} (${getRoleName(role)})`;
 
-                const otherName = role === 'Patient' ? cons.consultantFullName : cons.patientFullName;
+                const otherName = role === 'Patient' ? thisCons.consultantFullName : thisCons.patientFullName;
                 const otherRole = role === 'Patient' ? 'Консультант' : 'Пациент';
                 document.getElementById('remoteLabel').textContent = otherName;
 
                 document.getElementById('infoPanel').innerHTML = `
-                        <h3>${otherRole}:</h3>
-                        <p><strong>${otherName}</strong></p>
-                        ${role === 'Patient' ? `<p>${cons.consultantSpecialty}</p>` : ''}
-                        <p>📅 ${new Date(cons.date).toLocaleString()}</p>
-                        <p>📋 ${cons.subject}</p>
-                        <h4>📎 Документы</h4>
-                        <div id="docList"><p style="color:#999;font-size:12px;">Загрузка...</p></div>
-                        <input type="file" id="fileInput" accept=".pdf" style="display:none;" onchange="uploadDocument()">
-                        <button class="btn btn-sm" onclick="document.getElementById('fileInput').click()" style="margin-top:8px;">+ Загрузить PDF</button>
-                    `;
+            <h3>${otherRole}:</h3>
+            <p><strong>${otherName}</strong></p>
+            ${role === 'Patient' ? `<p>${thisCons.consultantSpecialty}</p>` : ''}
+            <p>📅 ${new Date(thisCons.date).toLocaleString()}</p>
+            <p>📋 ${thisCons.subject}</p>
+            <h4>📎 Документы</h4>
+            <div id="docList"><p style="color:#999;font-size:12px;">Загрузка...</p></div>
+            <input type="file" id="fileInput" accept=".pdf" style="display:none;" onchange="uploadDocument()">
+            <button class="btn btn-sm" onclick="document.getElementById('fileInput').click()" style="margin-top:8px;">+ Загрузить PDF</button>`;
 
-                updateStatusUI(cons.status);
+                updateStatusUI(thisCons.status);
 
                 const msgs = await fetch(`${API_URL}/api/Consultation/${consultationId}/messages`, { headers: { 'Authorization': `Bearer ${token}` } });
                 const messages = await msgs.json();
-                messages.forEach(m => addMessage(m, m.senderId === currentUserId));
+                messages.forEach(m => {
+                    addMessage(m, m.senderId === currentUserId);
+                });
 
                 await connectSignalR();
+
+                const incomingCid = sessionStorage.getItem('incomingConsultationId');
+                if (incomingCid === consultationId) {
+                    sessionStorage.removeItem('incomingConsultationId');
+                    try {
+                        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                        document.getElementById('localVideo').srcObject = localStream;
+                        document.getElementById('videoContainer').classList.add('active');
+                        document.getElementById('btnHangup').style.display = 'inline-block';
+                        isCallActive = true;
+                        setTimeout(async () => {
+                            try { await connection.invoke("GetPendingOffer", consultationId); } catch (e) { }
+                        }, 1000);
+                    } catch (e) { console.error("Ошибка доступа к камере:", e); }
+                }
+
+                if (role === 'Consultant') {
+                    setTimeout(() => restoreEntryFromSession(), 500);
+                }
+
                 loadDocuments();
-            } catch (e) {
-                console.error(e);
-                document.getElementById('messages').innerHTML = '<p style="color:red;">Ошибка загрузки</p>';
-            }
+            } catch (e) { console.error(e); document.getElementById('messages').innerHTML = '<p style="color:red;">Ошибка загрузки</p>'; }
 
             document.getElementById('btnSend').addEventListener('click', sendMessage);
-            document.getElementById('messageInput').addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') sendMessage();
+            document.getElementById('messageInput').addEventListener('keypress', function (e) { if (e.key === 'Enter') sendMessage(); });
+
+            window.addEventListener('beforeunload', () => {
+                if (isCallActive && connection && connection.state === signalR.HubConnectionState.Connected) {
+                    connection.invoke("HangUpSignal", consultationId);
+                    connection.invoke("SendMessage", consultationId, "🔴 Звонок завершён");
+                }
+                if (localStream) { localStream.getTracks().forEach(t => t.stop()); }
+                if (peerConnection) { peerConnection.close(); }
             });
         }
 
@@ -354,79 +454,259 @@
             const badge = document.getElementById('statusBadge');
             badge.textContent = status === 'scheduled' ? 'Запланирована' : status === 'in_progress' ? 'Идёт' : 'Завершена';
             badge.className = 'status-badge status-' + status;
-            if (role === 'Consultant' && status === 'scheduled') {
+            if (role === 'Consultant' && (status === 'scheduled' || status === 'in_progress')) {
                 document.getElementById('btnCall').style.display = 'inline-block';
+                document.getElementById('btnToggleEntry').style.display = 'inline-block';
             }
-            if (status === 'in_progress' && role === 'Consultant') {
-                document.getElementById('btnEnd').style.display = 'inline-block';
-            }
+            if (status === 'in_progress' && role === 'Consultant') document.getElementById('btnEnd').style.display = 'inline-block';
         }
 
+        function toggleEntryForm() {
+            const form = document.getElementById('entryFormContainer');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // ===== ФОРМА ЗАПИСИ =====
+
+        function addEcReferralRow() {
+            const container = document.getElementById('ecReferralsContainer');
+            const row = document.createElement('div');
+            row.className = 'ec-referral-row';
+            row.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <strong style="font-size:13px;">Направление</strong>
+            <button type="button" onclick="this.parentElement.parentElement.remove()" style="background:#dc3545;color:white;border:none;padding:3px 8px;border-radius:3px;font-size:11px;cursor:pointer;">✕</button>
+        </div>
+        <input type="text" class="ec-ref-org" placeholder="Медицинская организация">
+        <input type="text" class="ec-ref-purpose" placeholder="Цель исследования">
+        <textarea class="ec-ref-tests" rows="2" placeholder="Тесты (названия анализов)"></textarea>
+        <input type="text" class="ec-ref-service-code" placeholder="Код услуги (ОМС/ДМС)">`;
+            container.appendChild(row);
+        }
+
+        function saveEntryToSession() {
+            const referrals = [];
+            document.querySelectorAll('#ecReferralsContainer > .ec-referral-row').forEach(row => {
+                const org = row.querySelector('.ec-ref-org')?.value || '';
+                const purpose = row.querySelector('.ec-ref-purpose')?.value || '';
+                const tests = row.querySelector('.ec-ref-tests')?.value || '';
+                const serviceCode = row.querySelector('.ec-ref-service-code')?.value || '';
+                if (tests) {
+                    referrals.push({ organizationName: org, referralPurpose: purpose, tests, serviceCode });
+                }
+            });
+
+            sessionStorage.setItem('pendingEntry', JSON.stringify({
+                complaints: document.getElementById('ecComplaints')?.value || '',
+                prevDiagnoses: document.getElementById('ecPrevDiagnoses')?.value || '',
+                currentMeds: document.getElementById('ecCurrentMeds')?.value || '',
+                conclusion: document.getElementById('ecConclusion')?.value || '',
+                referrals: referrals
+            }));
+            document.getElementById('ecSaveStatus').innerHTML = '<span style="color:#28a745;">✅ Черновик сохранён!</span>';
+            setTimeout(() => { const s = document.getElementById('ecSaveStatus'); if (s) s.innerHTML = ''; }, 3000);
+        }
+
+        function restoreEntryFromSession() {
+            const savedEntry = sessionStorage.getItem('pendingEntry');
+            if (!savedEntry) return;
+            try {
+                const data = JSON.parse(savedEntry);
+                document.getElementById('ecComplaints').value = data.complaints || '';
+                document.getElementById('ecPrevDiagnoses').value = data.prevDiagnoses || '';
+                document.getElementById('ecCurrentMeds').value = data.currentMeds || '';
+                document.getElementById('ecConclusion').value = data.conclusion || '';
+
+                // Восстанавливаем направления
+                if (data.referrals && data.referrals.length > 0) {
+                    const container = document.getElementById('ecReferralsContainer');
+                    container.innerHTML = '';
+                    data.referrals.forEach(ref => {
+                        const row = document.createElement('div');
+                        row.className = 'ec-referral-row';
+                        row.innerHTML = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <strong style="font-size:13px;">Направление</strong>
+                        <button type="button" onclick="this.parentElement.parentElement.remove()" style="background:#dc3545;color:white;border:none;padding:3px 8px;border-radius:3px;font-size:11px;cursor:pointer;">✕</button>
+                    </div>
+                    <input type="text" class="ec-ref-org" placeholder="Медицинская организация" value="${ref.organizationName || ''}">
+                    <input type="text" class="ec-ref-purpose" placeholder="Цель исследования" value="${ref.referralPurpose || ''}">
+                    <textarea class="ec-ref-tests" rows="2" placeholder="Тесты (названия анализов)">${ref.tests || ''}</textarea>
+                    <input type="text" class="ec-ref-service-code" placeholder="Код услуги (ОМС/ДМС)" value="${ref.serviceCode || ''}">`;
+                        container.appendChild(row);
+                    });
+                }
+            } catch (e) { console.error('Ошибка восстановления:', e); }
+        }
+
+        // Обновлённая endConsultation
+        async function endConsultation() {
+            if (!confirm('Завершить консультацию?')) return;
+            if (isCallActive) await hangUp();
+            if (role === 'Consultant') {
+                const referrals = [];
+                document.querySelectorAll('#ecReferralsContainer > .ec-referral-row').forEach(row => {
+                    const org = row.querySelector('.ec-ref-org')?.value || '';
+                    const purpose = row.querySelector('.ec-ref-purpose')?.value || '';
+                    const tests = row.querySelector('.ec-ref-tests')?.value || '';
+                    const serviceCode = row.querySelector('.ec-ref-service-code')?.value || '';
+                    if (tests) referrals.push({ organizationName: org, referralPurpose: purpose, tests, serviceCode });
+                });
+                sessionStorage.setItem('pendingEntry', JSON.stringify({
+                    complaints: document.getElementById('ecComplaints')?.value || '',
+                    prevDiagnoses: document.getElementById('ecPrevDiagnoses')?.value || '',
+                    currentMeds: document.getElementById('ecCurrentMeds')?.value || '',
+                    conclusion: document.getElementById('ecConclusion')?.value || '',
+                    referrals: referrals
+                }));
+            }
+            try {
+                await fetch(`${API_URL}/api/Consultation/${consultationId}/complete`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+                updateStatusUI('completed');
+                document.getElementById('btnEnd').style.display = 'none';
+                if (role === 'Consultant') window.location.href = 'consultant_dashboard.html';
+            } catch (e) { console.error(e); }
+        }
+
+        function saveEntryToSession() {
+            const medications = [];
+            document.querySelectorAll('.med-row-inline').forEach(row => {
+                const select = row.querySelector('select');
+                const dosage = row.querySelector('.ec-med-dosage')?.value || '';
+                const frequency = row.querySelector('.ec-med-frequency')?.value || '';
+                if (select && select.value) {
+                    const name = select.options[select.selectedIndex].text;
+                    medications.push({ medicationId: select.value, name, dosage, frequency });
+                }
+            });
+            sessionStorage.setItem('pendingEntry', JSON.stringify({
+                complaints: document.getElementById('ecComplaints')?.value || '',
+                prevDiagnoses: document.getElementById('ecPrevDiagnoses')?.value || '',
+                currentMeds: document.getElementById('ecCurrentMeds')?.value || '',
+                conclusion: document.getElementById('ecConclusion')?.value || '',
+                diseaseId: document.getElementById('ecDiseaseId')?.value || '',
+                mkbCode: document.getElementById('ecMkbSearch')?.value || '',
+                medications: medications
+            }));
+            document.getElementById('ecSaveStatus').innerHTML = '<span style="color:#28a745;">✅ Черновик сохранён!</span>';
+            setTimeout(() => { const s = document.getElementById('ecSaveStatus'); if (s) s.innerHTML = ''; }, 3000);
+        }
+
+        function restoreEntryFromSession() {
+            const savedEntry = sessionStorage.getItem('pendingEntry');
+            if (!savedEntry) return;
+            try {
+                const data = JSON.parse(savedEntry);
+                document.getElementById('ecComplaints').value = data.complaints || '';
+                document.getElementById('ecPrevDiagnoses').value = data.prevDiagnoses || '';
+                document.getElementById('ecCurrentMeds').value = data.currentMeds || '';
+                document.getElementById('ecConclusion').value = data.conclusion || '';
+                if (data.diseaseId) document.getElementById('ecDiseaseId').value = data.diseaseId;
+                if (data.mkbCode) document.getElementById('ecMkbSearch').value = data.mkbCode;
+                if (data.medications && data.medications.length > 0) {
+                    loadEcDictionaries().then(dict => {
+                        const container = document.getElementById('ecMedsContainer');
+                        container.innerHTML = '';
+                        data.medications.forEach(med => {
+                            const row = document.createElement('div');
+                            row.className = 'med-row-inline';
+                            const options = dict.medications.map(m => `<option value="${m.medicationId}" ${m.medicationId === med.medicationId ? 'selected' : ''}>${m.name}</option>`).join('');
+                            row.innerHTML = `
+                        <select onchange="onEcMedSelect(this)"><option value="">— Выберите —</option>${options}</select>
+                        <input type="text" class="ec-med-dosage" placeholder="Дозировка" value="${med.dosage || ''}">
+                        <input type="text" class="ec-med-frequency" placeholder="Кратность" value="${med.frequency || ''}">
+                        <button type="button" onclick="this.parentElement.remove()">✕</button>`;
+                            container.appendChild(row);
+                        });
+                    });
+                }
+            } catch (e) { }
+        }
+
+        // ===== SIGNALR =====
         async function connectSignalR() {
             connection = new signalR.HubConnectionBuilder()
                 .withUrl(`${API_URL}/hubs/consultation`, { accessTokenFactory: () => token })
-                .withAutomaticReconnect()
-                .configureLogging(signalR.LogLevel.Information)
-                .build();
+                .withAutomaticReconnect().configureLogging(signalR.LogLevel.Information).build();
 
-            connection.on("ReceiveMessage", (msg) => {
-                addMessage(msg, msg.senderId === currentUserId);
+            connection.on("ReceiveMessage", (msg) => { addMessage(msg, msg.senderId === currentUserId); });
+
+            connection.on("IncomingCall", (data) => {
+                sessionStorage.setItem('incomingConsultationId', data.consultationId);
+                sessionStorage.setItem('incomingCallerName', data.callerName);
+                if (!document.getElementById('incomingCallModal')) {
+                    const modal = document.createElement('div');
+                    modal.id = 'incomingCallModal';
+                    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;justify-content:center;align-items:center;z-index:9999;';
+                    modal.innerHTML = `
+                <div style="background:white;border-radius:15px;padding:30px;text-align:center;max-width:400px;">
+                    <h3 style="margin-bottom:15px;">📞 Входящий звонок</h3>
+                    <p style="margin-bottom:20px;">Звонит: ${data.callerName || 'Консультант'}</p>
+                    <button onclick="acceptCallHere()" style="background:#28a745;color:white;border:none;padding:15px 30px;border-radius:30px;font-size:16px;cursor:pointer;margin:5px;">✅ Принять</button>
+                    <button onclick="rejectCallHere()" style="background:#dc3545;color:white;border:none;padding:15px 30px;border-radius:30px;font-size:16px;cursor:pointer;margin:5px;">❌ Отклонить</button>
+                </div>`;
+                    document.body.appendChild(modal);
+                }
             });
 
             connection.on("ReceiveOffer", async (offer) => {
-                console.log("📞 Incoming call");
-                try {
-                    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                    document.getElementById('localVideo').srcObject = localStream;
-                    document.getElementById('videoContainer').classList.add('active');
-                } catch (e) { console.log("Камера недоступна"); }
+                pendingOffer = offer;
+                if (isCallActive && localStream) await processOffer(offer);
+            });
+
+            connection.on("HangUpSignal", () => { if (isCallActive) hangUpCleanup(); pendingOffer = null; });
+
+            connection.on("ReceiveAnswer", async (answer) => {
+                if (peerConnection) { try { await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(answer))); } catch (e) { } }
+            });
+
+            connection.on("ReceiveIceCandidate", async (candidate) => {
+                if (candidate && peerConnection) { try { await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate))); } catch (e) { } }
+            });
+
+            connection.onreconnecting(() => { });
+            connection.onreconnected(() => { connection.invoke("JoinConsultation", consultationId).catch(() => { }); });
+            connection.onclose(() => { });
+
+            try { await connection.start(); await connection.invoke("JoinConsultation", consultationId); } catch (err) { }
+        }
+
+        async function processOffer(offer) {
+            try {
                 await setupPeerConnection();
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(offer)));
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
                 await connection.invoke("SendAnswer", consultationId, JSON.stringify(answer));
+                pendingOffer = null;
+            } catch (e) { }
+        }
+
+        function acceptCallHere() {
+            document.getElementById('incomingCallModal')?.remove();
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(async stream => {
+                localStream = stream;
+                document.getElementById('localVideo').srcObject = localStream;
+                document.getElementById('videoContainer').classList.add('active');
                 document.getElementById('btnHangup').style.display = 'inline-block';
-            });
+                isCallActive = true;
+                if (pendingOffer) await processOffer(pendingOffer); else await setupPeerConnection();
+                connection.invoke("SendMessage", consultationId, "📞 Пациент принял звонок").catch(() => { });
+            }).catch(err => { alert("Не удалось получить доступ к камере"); });
+        }
 
-            connection.on("ReceiveAnswer", async (answer) => {
-                if (peerConnection) {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(answer)));
-                }
-            });
-
-            connection.on("ReceiveIceCandidate", async (candidate) => {
-                if (candidate && peerConnection) {
-                    try { await peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate))); } catch (e) { }
-                }
-            });
-
-            connection.onreconnecting(() => console.log("Reconnecting..."));
-            connection.onreconnected(() => console.log("Reconnected!"));
-            connection.onclose(() => console.log("Connection closed"));
-
-            try {
-                await connection.start();
-                console.log("✅ SignalR connected!");
-                await connection.invoke("JoinConsultation", consultationId);
-            } catch (err) { console.error("SignalR error:", err.message); }
+        function rejectCallHere() {
+            document.getElementById('incomingCallModal')?.remove();
+            pendingOffer = null;
+            connection.invoke("SendMessage", consultationId, "❌ Пациент отклонил звонок").catch(() => { });
         }
 
         async function setupPeerConnection() {
+            if (peerConnection) peerConnection.close();
             peerConnection = new RTCPeerConnection(rtcConfig);
-            if (localStream) {
-                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-            }
-            peerConnection.ontrack = (event) => {
-                document.getElementById('remoteVideo').srcObject = event.streams[0];
-            };
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    connection.invoke("SendIceCandidate", consultationId, JSON.stringify(event.candidate));
-                }
-            };
-            peerConnection.onconnectionstatechange = () => {
-                if (peerConnection.connectionState === 'connected') console.log("✅ WebRTC connected");
-            };
+            if (localStream) localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+            peerConnection.ontrack = (e) => { document.getElementById('remoteVideo').srcObject = e.streams[0]; };
+            peerConnection.onicecandidate = (e) => { if (e.candidate) connection.invoke("SendIceCandidate", consultationId, JSON.stringify(e.candidate)).catch(() => { }); };
         }
 
         async function startCall() {
@@ -434,26 +714,75 @@
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 document.getElementById('localVideo').srcObject = localStream;
                 document.getElementById('videoContainer').classList.add('active');
-                await fetch(`${API_URL}/api/Consultation/${consultationId}/start`, {
-                    method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
-                });
+                await fetch(`${API_URL}/api/Consultation/${consultationId}/start`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
                 updateStatusUI('in_progress');
                 await setupPeerConnection();
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 await connection.invoke("SendOffer", consultationId, JSON.stringify(offer));
-                document.getElementById('btnCall').style.display = 'none';
+                if (thisCons?.patientUserId) await connection.invoke("IncomingCall", consultationId, currentUserName, thisCons.patientUserId);
+                await connection.invoke("SendMessage", consultationId, "📞 Консультант начал звонок");
                 document.getElementById('btnHangup').style.display = 'inline-block';
-            } catch (e) { console.error(e); alert('Ошибка доступа к камере/микрофону.'); }
+                document.getElementById('btnCall').style.display = 'none';
+                isCallActive = true;
+            } catch (e) { console.error(e); }
         }
 
-        async function hangUp() {
+        function hangUpCleanup() {
+            isCallActive = false;
+            pendingOffer = null;
             if (peerConnection) { peerConnection.close(); peerConnection = null; }
             if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
             document.getElementById('localVideo').srcObject = null;
             document.getElementById('remoteVideo').srcObject = null;
             document.getElementById('videoContainer').classList.remove('active');
             document.getElementById('btnHangup').style.display = 'none';
+            document.getElementById('btnCall').style.display = role === 'Consultant' ? 'inline-block' : 'none';
+        }
+
+        async function hangUp(skipSignal = false) {
+            if (!isCallActive) return;
+            if (!skipSignal && connection && connection.state === signalR.HubConnectionState.Connected) {
+                await connection.invoke("HangUpSignal", consultationId).catch(() => { });
+                await connection.invoke("SendMessage", consultationId, "🔴 Звонок завершён").catch(() => { });
+            }
+            hangUpCleanup();
+        }
+
+        async function endConsultation() {
+            if (!confirm('Завершить консультацию?')) return;
+            if (isCallActive) await hangUp();
+            if (role === 'Consultant') {
+                const medications = [];
+                document.querySelectorAll('.med-row-inline').forEach(row => {
+                    const select = row.querySelector('select');
+                    const dosage = row.querySelector('.ec-med-dosage')?.value || '';
+                    const frequency = row.querySelector('.ec-med-frequency')?.value || '';
+                    if (select && select.value) {
+                        medications.push({ medicationId: select.value, name: select.options[select.selectedIndex].text, dosage, frequency });
+                    }
+                });
+                sessionStorage.setItem('pendingEntry', JSON.stringify({
+                    complaints: document.getElementById('ecComplaints')?.value || '',
+                    prevDiagnoses: document.getElementById('ecPrevDiagnoses')?.value || '',
+                    currentMeds: document.getElementById('ecCurrentMeds')?.value || '',
+                    conclusion: document.getElementById('ecConclusion')?.value || '',
+                    diseaseId: document.getElementById('ecDiseaseId')?.value || '',
+                    mkbCode: document.getElementById('ecMkbSearch')?.value || '',
+                    medications: medications
+                }));
+            }
+            try {
+                await fetch(`${API_URL}/api/Consultation/${consultationId}/complete`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+                updateStatusUI('completed');
+                document.getElementById('btnEnd').style.display = 'none';
+                if (role === 'Consultant') window.location.href = 'consultant_dashboard.html';
+            } catch (e) { console.error(e); }
+        }
+
+        function goBack() {
+            if (isCallActive) hangUp();
+            window.location.href = role === 'Patient' ? 'dashboard.html' : 'consultant_dashboard.html';
         }
 
         function addMessage(msg, isMine) {
@@ -468,92 +797,41 @@
             const input = document.getElementById('messageInput');
             const text = input.value.trim();
             if (!text || !connection) return;
-            try {
-                await connection.invoke("SendMessage", consultationId, text);
-                input.value = '';
-            } catch (err) { console.error(err); }
+            try { await connection.invoke("SendMessage", consultationId, text); input.value = ''; } catch (err) { }
         }
 
-        async function endConsultation() {
-            if (!confirm('Завершить консультацию?')) return;
-            hangUp();
-            try {
-                await fetch(`${API_URL}/api/Consultation/${consultationId}/complete`, {
-                    method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
-                });
-                updateStatusUI('completed');
-                document.getElementById('btnEnd').style.display = 'none';
-                if (role === 'Consultant') {
-                    window.location.href = 'consultant_dashboard.html';
-                }
-            } catch (e) { console.error(e); }
-        }
-
-        function goBack() {
-            hangUp();
-            if (role === 'Patient') window.location.href = 'dashboard.html';
-            else window.location.href = 'consultant_dashboard.html';
-        }
-
-        // ===== ДОКУМЕНТЫ =====
         async function loadDocuments() {
             try {
                 const r = await fetch(`${API_URL}/api/Consultation/${consultationId}/documents`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (r.ok) {
                     const docs = await r.json();
-                    let html = '';
-                    if (docs.length === 0) {
-                        html = '<p style="color:#999;font-size:12px;">Нет документов</p>';
-                    } else {
-                        docs.forEach(d => {
-                            html += `<div class="doc-item">
-                                    <a href="#" onclick="downloadDoc('${d.documentId}','${d.fileName}');return false;">📄 ${d.fileName}</a>
-                                    <span style="color:#999;font-size:10px;"> ${new Date(d.uploadDate).toLocaleDateString()}</span>
-                                </div>`;
-                        });
-                    }
+                    let html = docs.length === 0 ? '<p style="color:#999;font-size:12px;">Нет документов</p>' : '';
+                    docs.forEach(d => { html += `<div class="doc-item"><a href="#" onclick="downloadDoc('${d.documentId}','${d.fileName}');return false;">📄 ${d.fileName}</a><span style="color:#999;font-size:10px;"> ${new Date(d.uploadDate).toLocaleDateString()}</span></div>`; });
                     document.getElementById('docList').innerHTML = html;
                 }
-            } catch (e) { console.error(e); }
+            } catch (e) { }
         }
 
         async function uploadDocument() {
             const file = document.getElementById('fileInput').files[0];
             if (!file) return;
-            const formData = new FormData();
-            formData.append('file', file);
+            const fd = new FormData(); fd.append('file', file);
             try {
-                const r = await fetch(`${API_URL}/api/Consultation/${consultationId}/upload`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token}` },
-                    body: formData
-                });
-                if (r.ok) {
-                    document.getElementById('fileInput').value = '';
-                    loadDocuments();
-                } else { alert('Ошибка загрузки'); }
-            } catch (e) { console.error(e); }
+                const r = await fetch(`${API_URL}/api/Consultation/${consultationId}/upload`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+                if (r.ok) { document.getElementById('fileInput').value = ''; loadDocuments(); }
+            } catch (e) { }
         }
 
         function downloadDoc(docId, fileName) {
-            fetch(`${API_URL}/api/Documents/${docId}/download`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })
-                .then(response => response.blob())
-                .then(blob => {
+            fetch(`${API_URL}/api/Documents/${docId}/download`, { headers: { 'Authorization': `Bearer ${token}` } })
+                .then(r => r.blob()).then(blob => {
                     const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = fileName;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    window.URL.revokeObjectURL(url);
-                })
-                .catch(e => console.error('Download error:', e));
+                    const a = document.createElement('a'); a.href = url; a.download = fileName;
+                    document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+                }).catch(e => { });
         }
 
-        init();
+    init();
     </script>
-</body>
+    </body>
 </html>

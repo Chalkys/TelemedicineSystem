@@ -168,10 +168,32 @@ namespace TelemedicineSystem.API.Controllers
                 TreatmentCourseId = course.TreatmentCourseId,
                 ConsultantId = consultant.ConsultantId,
                 DiseaseId = dto.DiseaseId,
-                Conclusion = dto.Conclusion ?? lastEntry?.Conclusion,
-                Recommendations = dto.Recommendations ?? lastEntry?.Recommendations,
                 CreatedAt = DateTime.UtcNow
             };
+
+            // Автозаполнение из заявки для первой записи в курсе
+            if (lastEntry == null && dto.ApplicationId.HasValue)
+            {
+                var application = await _context.Applications
+                    .FirstOrDefaultAsync(a => a.ApplicationId == dto.ApplicationId.Value);
+
+                if (application != null)
+                {
+                    entry.Complaints = dto.Complaints ?? application.Complaints;
+                    entry.PreviousDiagnoses = dto.PreviousDiagnoses ?? application.PreviousDiagnoses;
+                    entry.CurrentMedications = dto.CurrentMedications ?? application.CurrentMedications;
+                    entry.Conclusion = dto.Conclusion;
+                    entry.Recommendations = dto.Recommendations;
+                }
+            }
+            else
+            {
+                entry.Complaints = dto.Complaints ?? lastEntry?.Complaints;
+                entry.PreviousDiagnoses = dto.PreviousDiagnoses ?? lastEntry?.PreviousDiagnoses;
+                entry.CurrentMedications = dto.CurrentMedications ?? lastEntry?.CurrentMedications;
+                entry.Conclusion = dto.Conclusion ?? lastEntry?.Conclusion;
+                entry.Recommendations = dto.Recommendations ?? lastEntry?.Recommendations;
+            }
             // Привязываем запись к консультации, если указан ApplicationId
             if (dto.ApplicationId.HasValue)
             {
@@ -435,6 +457,33 @@ namespace TelemedicineSystem.API.Controllers
 
             return Ok(new { medications, procedures, analyses });
         }
+
+        // 7. Создать направление на анализ
+        [HttpPost("referral")]
+        [Authorize(Roles = "Consultant")]
+        public async Task<IActionResult> AddReferral([FromBody] AddReferralDto dto)
+        {
+            var referral = new AnalysisReferral
+            {
+                ReferralId = Guid.NewGuid(),
+                EntryId = dto.EntryId,
+                PatientName = dto.PatientName,
+                PatientAge = dto.PatientAge,
+                MedicalBookNumber = dto.MedicalBookNumber,
+                OrganizationName = dto.OrganizationName,
+                ReferralDate = DateTime.UtcNow,
+                DoctorName = dto.DoctorName,
+                MkbCode = dto.MkbCode,
+                ReferralPurpose = dto.ReferralPurpose,
+                Tests = dto.Tests,
+                ServiceCode = dto.ServiceCode
+            };
+
+            _context.AnalysisReferrals.Add(referral);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Направление создано", referralId = referral.ReferralId });
+        }
     }
 
     // DTO
@@ -449,6 +498,9 @@ namespace TelemedicineSystem.API.Controllers
         public List<MedicationEntryDto>? Medications { get; set; }
         public List<Guid>? ProcedureIds { get; set; }
         public List<Guid>? AnalysisIds { get; set; }
+        public string? Complaints { get; set; }
+        public string? PreviousDiagnoses { get; set; }
+        public string? CurrentMedications { get; set; }
     }
 
     public class MedicationEntryDto
@@ -464,5 +516,18 @@ namespace TelemedicineSystem.API.Controllers
         public string? FinalConclusion { get; set; }
         public string? Recommendations { get; set; }
         public Guid? DiseaseId { get; set; }
+    }
+    public class AddReferralDto
+    {
+        public Guid EntryId { get; set; }
+        public string? PatientName { get; set; }
+        public int? PatientAge { get; set; }
+        public string? MedicalBookNumber { get; set; }
+        public string? OrganizationName { get; set; }
+        public string? DoctorName { get; set; }
+        public string? MkbCode { get; set; }
+        public string? ReferralPurpose { get; set; }
+        public string? Tests { get; set; }
+        public string? ServiceCode { get; set; }
     }
 }

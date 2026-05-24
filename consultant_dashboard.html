@@ -169,7 +169,7 @@
     <div class="container" id="mainContent"></div>
 
     <script>
-        const API_URL = `https://${window.location.hostname}:5096`;
+        const API_URL = 'http://192.168.0.106:5095';
         const token = localStorage.getItem('token');
         const role = localStorage.getItem('role');
         let currentTab = 'new';
@@ -254,7 +254,6 @@
                 if (response.ok) {
                     const apps = await response.json();
 
-                    // Для вкладки "Без записи" — фильтруем на фронте
                     let filteredApps = apps;
                     if (currentTab === 'no-record') {
                         filteredApps = apps.filter(app => !app.hasEntry);
@@ -429,7 +428,13 @@
                         <h3>📝 Новая запись в медкарту</h3>
                         <p><strong>Пациент:</strong> ${patientFullName}</p>
                         <form id="entryForm">
-                            <label>Заключение:</label>
+                            <label>Причина обращения (жалобы):</label>
+                            <textarea id="complaints" rows="2"></textarea>
+                            <label>Ранее поставленные диагнозы:</label>
+                            <textarea id="prevDiagnoses" rows="2"></textarea>
+                            <label>Принимаемые медикаменты:</label>
+                            <textarea id="currentMeds" rows="2"></textarea>
+                            <label>Предварительный диагноз:</label>
                             <textarea id="conclusion" rows="2"></textarea>
                             <label>МКБ-10 (предположительный код):</label>
                             <input type="text" id="mkbSearch" placeholder="Введите код или название..." oninput="searchMkb()">
@@ -438,6 +443,9 @@
                             <label>💊 Медикаменты:</label>
                             <div id="medsContainer"></div>
                             <button type="button" class="btn btn-sm" onclick="addMedRow()">+ Добавить лекарство</button>
+                            <label style="margin-top:10px;">🔬 Направления на анализ:</label>
+                            <div id="referralsContainer"></div>
+                            <button type="button" class="btn btn-sm" onclick="addReferralRow()">+ Направление на анализ</button>
                             <div style="display:flex;gap:10px;margin-top:15px;">
                                 <button type="submit" class="btn btn-accept">Сохранить запись</button>
                                 <button type="button" onclick="showApplications()" class="btn btn-reject">Отмена</button>
@@ -448,6 +456,37 @@
 
             window._entryData = { patientId, applicationId, patientFullName, dict };
             addMedRow();
+            // Восстанавливаем данные из sessionStorage
+            const savedEntry = sessionStorage.getItem('pendingEntry');
+            if (savedEntry) {
+                const data = JSON.parse(savedEntry);
+                sessionStorage.removeItem('pendingEntry');
+
+                document.getElementById('complaints').value = data.complaints || '';
+                document.getElementById('prevDiagnoses').value = data.prevDiagnoses || '';
+                document.getElementById('currentMeds').value = data.currentMeds || '';
+                document.getElementById('conclusion').value = data.conclusion || '';
+
+                // Восстанавливаем направления на анализы
+                if (data.referrals && data.referrals.length > 0) {
+                    const container = document.getElementById('referralsContainer');
+                    container.innerHTML = '';
+                    data.referrals.forEach(ref => {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:10px;';
+                        row.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                    <strong>Направление</strong>
+                    <button type="button" class="btn btn-reject" onclick="this.parentElement.parentElement.remove()" style="padding:4px 8px;font-size:11px;">✕</button>
+                </div>
+                <input type="text" class="ref-org" placeholder="Медицинская организация" value="${ref.organizationName || ''}">
+                <input type="text" class="ref-purpose" placeholder="Цель исследования" value="${ref.referralPurpose || ''}">
+                <textarea class="ref-tests" rows="2" placeholder="Тесты">${ref.tests || ''}</textarea>
+                <input type="text" class="ref-service-code" placeholder="Код услуги" value="${ref.serviceCode || ''}">`;
+                        container.appendChild(row);
+                    });
+                }
+            }
 
             document.getElementById('entryForm').onsubmit = async function (e) {
                 e.preventDefault();
@@ -460,11 +499,30 @@
                         medications.push({ medicationId: select.value, dosage, frequency });
                     }
                 });
+                const referrals = [];
+                document.querySelectorAll('#referralsContainer > div').forEach(row => {
+                    const org = row.querySelector('.ref-org').value;
+                    const purpose = row.querySelector('.ref-purpose').value;
+                    const tests = row.querySelector('.ref-tests').value;
+                    const serviceCode = row.querySelector('.ref-service-code').value;
+                    if (tests) {
+                        referrals.push({
+                            organizationName: org,
+                            referralPurpose: purpose,
+                            tests: tests,
+                            serviceCode: serviceCode
+                        });
+                    }
+                });
                 const body = {
                     patientId, applicationId,
+                    complaints: document.getElementById('complaints').value,
+                    previousDiagnoses: document.getElementById('prevDiagnoses').value,
+                    currentMedications: document.getElementById('currentMeds').value,
                     conclusion: document.getElementById('conclusion').value,
                     diseaseId: document.getElementById('diseaseId').value || null,
-                    medications: medications.length > 0 ? medications : null
+                    medications: medications.length > 0 ? medications : null,
+                    referrals: referrals.length > 0 ? referrals : null
                 };
                 try {
                     const response = await fetch(`${API_URL}/api/MedicalBook/entry`, {
@@ -509,6 +567,22 @@
                     <input type="text" class="med-dosage" placeholder="Дозировка" style="flex:1;min-width:120px;">
                     <input type="text" class="med-frequency" placeholder="Кратность приёма" style="flex:1;min-width:130px;">
                     <button type="button" class="btn btn-reject" onclick="this.parentElement.remove()" style="padding:6px 10px;font-size:12px;">✕</button>`;
+            container.appendChild(row);
+        }
+
+        function addReferralRow() {
+            const container = document.getElementById('referralsContainer');
+            const row = document.createElement('div');
+            row.style.cssText = 'background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:10px;';
+            row.innerHTML = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <strong>Направление</strong>
+                        <button type="button" class="btn btn-reject" onclick="this.parentElement.parentElement.remove()" style="padding:4px 8px;font-size:11px;">✕</button>
+                    </div>
+                    <input type="text" class="ref-org" placeholder="Медицинская организация">
+                    <input type="text" class="ref-purpose" placeholder="Цель исследования (например: диагностика анемии)">
+                    <textarea class="ref-tests" rows="2" placeholder="Тесты (названия анализов)"></textarea>
+                    <input type="text" class="ref-service-code" placeholder="Код услуги (ОМС/ДМС)">`;
             container.appendChild(row);
         }
 

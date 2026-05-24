@@ -53,8 +53,11 @@ namespace TelemedicineSystem.API.Hubs
                 SentAt = DateTime.UtcNow
             };
 
-            _context.ConsultationMessages.Add(message);
-            await _context.SaveChangesAsync();
+            if (!text.StartsWith("📞") && !text.StartsWith("🔴") && !text.StartsWith("❌"))
+            {
+                _context.ConsultationMessages.Add(message);
+                await _context.SaveChangesAsync();
+            }
 
             await Clients.Group(consultationId.ToString()).SendAsync("ReceiveMessage", new
             {
@@ -67,9 +70,20 @@ namespace TelemedicineSystem.API.Hubs
         }
 
         // Сигналинг для WebRTC
+        private static Dictionary<Guid, string> _pendingOffers = new();
+
         public async Task SendOffer(Guid consultationId, string offer)
         {
+            _pendingOffers[consultationId] = offer;
             await Clients.OthersInGroup(consultationId.ToString()).SendAsync("ReceiveOffer", offer);
+        }
+
+        public async Task GetPendingOffer(Guid consultationId)
+        {
+            if (_pendingOffers.TryGetValue(consultationId, out var offer))
+            {
+                await Clients.Caller.SendAsync("ReceiveOffer", offer);
+            }
         }
 
         public async Task SendAnswer(Guid consultationId, string answer)
@@ -80,6 +94,18 @@ namespace TelemedicineSystem.API.Hubs
         public async Task SendIceCandidate(Guid consultationId, string candidate)
         {
             await Clients.OthersInGroup(consultationId.ToString()).SendAsync("ReceiveIceCandidate", candidate);
+        }
+        public async Task IncomingCall(Guid consultationId, string callerName, Guid patientUserId)
+        {
+            await Clients.User(patientUserId.ToString()).SendAsync("IncomingCall", new
+            {
+                consultationId,
+                callerName
+            });
+        }
+        public async Task HangUpSignal(Guid consultationId)
+        {
+            await Clients.OthersInGroup(consultationId.ToString()).SendAsync("HangUpSignal");
         }
     }
 }

@@ -45,6 +45,7 @@ namespace TelemedicineSystem.API.Controllers
                     PatientFullName = c.Patient.Surname + " " + c.Patient.Name + " " + c.Patient.MiddleName,
                     ConsultantFullName = c.Consultant.Surname + " " + c.Consultant.Name + " " + c.Consultant.MiddleName,
                     ConsultantSpecialty = c.Consultant.Specialty,
+                    PatientUserId = c.Patient.UserId,
                     Subject = c.Application != null ? c.Application.Subject : ""
                 })
                 .ToListAsync();

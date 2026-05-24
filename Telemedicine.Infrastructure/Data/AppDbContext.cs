@@ -28,6 +28,7 @@ namespace Telemedicine.Infrastructure.Data
         public DbSet<EntryProcedure> EntryProcedures { get; set; }
         public DbSet<EntryAnalysis> EntryAnalyses { get; set; }
         public DbSet<ConsultationMessage> ConsultationMessages { get; set; }
+        public DbSet<AnalysisReferral> AnalysisReferrals { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
