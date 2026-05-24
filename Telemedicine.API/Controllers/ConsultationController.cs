@@ -40,9 +40,12 @@ namespace TelemedicineSystem.API.Controllers
                 {
                     c.ConsultationId,
                     c.ApplicationId,
+                    patientId = c.Patient.PatientId,
                     c.Date,
                     c.Status,
                     PatientFullName = c.Patient.Surname + " " + c.Patient.Name + " " + c.Patient.MiddleName,
+                    PatientDateOfBirth = c.Patient.DateOfBirth,
+                    PatientGender = c.Patient.Gender,
                     ConsultantFullName = c.Consultant.Surname + " " + c.Consultant.Name + " " + c.Consultant.MiddleName,
                     ConsultantSpecialty = c.Consultant.Specialty,
                     PatientUserId = c.Patient.UserId,

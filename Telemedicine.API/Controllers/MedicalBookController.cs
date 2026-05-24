@@ -62,12 +62,23 @@ namespace TelemedicineSystem.API.Controllers
                 c.CauseOfEnd,
                 ConsultantFullName = c.Consultant.Surname + " " + c.Consultant.Name + " " + c.Consultant.MiddleName,
                 c.Consultant.Specialty,
+                // Жалобы и предв. диагноз из первой записи курса
+                Complaints = c.Entries.OrderBy(e => e.CreatedAt).FirstOrDefault() != null
+                    ? c.Entries.OrderBy(e => e.CreatedAt).FirstOrDefault().Complaints
+                    : null,
+                PreliminaryDiagnosis = c.Entries.OrderBy(e => e.CreatedAt).FirstOrDefault() != null
+                    ? c.Entries.OrderBy(e => e.CreatedAt).FirstOrDefault().Conclusion
+                    : null,
                 Entries = c.Entries.OrderByDescending(e => e.CreatedAt).Select(e => new
                 {
                     e.EntryId,
+                    e.Complaints,
+                    e.PreviousDiagnoses,
+                    e.CurrentMedications,
                     e.Conclusion,
                     e.Recommendations,
                     e.CreatedAt,
+                    e.ConsultationId,
                     Disease = e.Disease != null ? new { e.Disease.MkbCode, e.Disease.Name } : null,
                     Medications = e.EntryMedications.Select(em => new
                     {
@@ -85,7 +96,23 @@ namespace TelemedicineSystem.API.Controllers
                     {
                         ea.Analysis.AnalysisId,
                         ea.Analysis.Name
-                    })
+                    }),
+                    Referrals = _context.AnalysisReferrals
+                        .Where(r => r.EntryId == e.EntryId)
+                        .Select(r => new
+                        {
+                            r.ReferralId,
+                            r.OrganizationName,
+                            r.ReferralPurpose,
+                            r.Tests,
+                            r.ServiceCode
+                        })
+                        .ToList(),
+                    // Документы, привязанные к консультации этой записи
+                    Documents = _context.Documents
+                        .Where(d => d.ConsultationId == e.ConsultationId)
+                        .Select(d => new { d.DocumentId, d.FileName, d.UploadDate })
+                        .ToList()
                 })
             });
 
@@ -152,14 +179,36 @@ namespace TelemedicineSystem.API.Controllers
                 }
             }
 
-            // Создать запись, скопировав данные из последней записи курса (если есть)
-            var lastEntry = await _context.Entries
-                .Include(e => e.EntryMedications)
-                .Include(e => e.EntryProcedures)
-                .Include(e => e.EntryAnalyses)
+            // === ДИАГНОСТИКА ===
+            var allEntriesInCourse = await _context.Entries
                 .Where(e => e.TreatmentCourseId == course.TreatmentCourseId)
                 .OrderByDescending(e => e.CreatedAt)
-                .FirstOrDefaultAsync();
+                .ToListAsync();
+
+            Console.WriteLine($"=== КУРС: {course.TreatmentCourseId} ===");
+            Console.WriteLine($"Всего записей в курсе: {allEntriesInCourse.Count}");
+            foreach (var e in allEntriesInCourse)
+            {
+                Console.WriteLine($"  Запись {e.EntryId}: Complaints='{e.Complaints}', PrevDiagnoses='{e.PreviousDiagnoses}', CurrentMeds='{e.CurrentMedications}', Conclusion='{e.Conclusion}'");
+            }
+
+            var lastEntry = allEntriesInCourse.FirstOrDefault();
+            Console.WriteLine($"lastEntry == null: {lastEntry == null}");
+            if (lastEntry != null)
+            {
+                Console.WriteLine($"lastEntry.Complaints: '{lastEntry.Complaints}'");
+                Console.WriteLine($"lastEntry.PreviousDiagnoses: '{lastEntry.PreviousDiagnoses}'");
+                Console.WriteLine($"lastEntry.CurrentMedications: '{lastEntry.CurrentMedications}'");
+                Console.WriteLine($"lastEntry.Conclusion: '{lastEntry.Conclusion}'");
+            }
+
+            // Данные из DTO
+            Console.WriteLine($"=== DTO ===");
+            Console.WriteLine($"dto.Complaints: '{dto.Complaints}'");
+            Console.WriteLine($"dto.PreviousDiagnoses: '{dto.PreviousDiagnoses}'");
+            Console.WriteLine($"dto.CurrentMedications: '{dto.CurrentMedications}'");
+            Console.WriteLine($"dto.Conclusion: '{dto.Conclusion}'");
+            Console.WriteLine($"dto.ApplicationId: {dto.ApplicationId}");
 
             var entry = new Entry
             {
@@ -171,30 +220,75 @@ namespace TelemedicineSystem.API.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
-            // Автозаполнение из заявки для первой записи в курсе
-            if (lastEntry == null && dto.ApplicationId.HasValue)
+            // Сохраняем направления на анализы
+            if (dto.Referrals != null && dto.Referrals.Any())
             {
-                var application = await _context.Applications
-                    .FirstOrDefaultAsync(a => a.ApplicationId == dto.ApplicationId.Value);
-
-                if (application != null)
+                foreach (var refDto in dto.Referrals)
                 {
-                    entry.Complaints = dto.Complaints ?? application.Complaints;
-                    entry.PreviousDiagnoses = dto.PreviousDiagnoses ?? application.PreviousDiagnoses;
-                    entry.CurrentMedications = dto.CurrentMedications ?? application.CurrentMedications;
-                    entry.Conclusion = dto.Conclusion;
-                    entry.Recommendations = dto.Recommendations;
+                    _context.AnalysisReferrals.Add(new AnalysisReferral
+                    {
+                        ReferralId = Guid.NewGuid(),
+                        EntryId = entry.EntryId,
+                        OrganizationName = refDto.OrganizationName,
+                        ReferralPurpose = refDto.ReferralPurpose,
+                        Tests = refDto.Tests,
+                        ServiceCode = refDto.ServiceCode,
+                        ReferralDate = DateTime.UtcNow
+                    });
                 }
+            }
+
+            // Автозаполнение
+            if (lastEntry == null)
+            {
+                Console.WriteLine(">>> ПЕРВАЯ запись в курсе");
+                if (dto.ApplicationId.HasValue)
+                {
+                    var application = await _context.Applications
+                        .FirstOrDefaultAsync(a => a.ApplicationId == dto.ApplicationId.Value);
+
+                    if (application != null)
+                    {
+                        Console.WriteLine($"application.Complaints: '{application.Complaints}'");
+                        entry.Complaints = !string.IsNullOrWhiteSpace(dto.Complaints) ? dto.Complaints : application.Complaints;
+                        entry.PreviousDiagnoses = !string.IsNullOrWhiteSpace(dto.PreviousDiagnoses) ? dto.PreviousDiagnoses : application.PreviousDiagnoses;
+                        entry.CurrentMedications = !string.IsNullOrWhiteSpace(dto.CurrentMedications) ? dto.CurrentMedications : application.CurrentMedications;
+                    }
+                    else
+                    {
+                        Console.WriteLine("application == null!");
+                        entry.Complaints = dto.Complaints;
+                        entry.PreviousDiagnoses = dto.PreviousDiagnoses;
+                        entry.CurrentMedications = dto.CurrentMedications;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("dto.ApplicationId == null, не из чего автозаполнять");
+                    entry.Complaints = dto.Complaints;
+                    entry.PreviousDiagnoses = dto.PreviousDiagnoses;
+                    entry.CurrentMedications = dto.CurrentMedications;
+                }
+                entry.Conclusion = dto.Conclusion;
+                entry.Recommendations = dto.Recommendations;
             }
             else
             {
-                entry.Complaints = dto.Complaints ?? lastEntry?.Complaints;
-                entry.PreviousDiagnoses = dto.PreviousDiagnoses ?? lastEntry?.PreviousDiagnoses;
-                entry.CurrentMedications = dto.CurrentMedications ?? lastEntry?.CurrentMedications;
-                entry.Conclusion = dto.Conclusion ?? lastEntry?.Conclusion;
-                entry.Recommendations = dto.Recommendations ?? lastEntry?.Recommendations;
+                Console.WriteLine(">>> НЕ ПЕРВАЯ запись — копируем из предыдущей");
+                entry.Complaints = !string.IsNullOrWhiteSpace(dto.Complaints) ? dto.Complaints : lastEntry.Complaints;
+                entry.PreviousDiagnoses = !string.IsNullOrWhiteSpace(dto.PreviousDiagnoses) ? dto.PreviousDiagnoses : lastEntry.PreviousDiagnoses;
+                entry.CurrentMedications = !string.IsNullOrWhiteSpace(dto.CurrentMedications) ? dto.CurrentMedications : lastEntry.CurrentMedications;
+                entry.Conclusion = !string.IsNullOrWhiteSpace(dto.Conclusion) ? dto.Conclusion : lastEntry.Conclusion;
+                entry.Recommendations = !string.IsNullOrWhiteSpace(dto.Recommendations) ? dto.Recommendations : lastEntry.Recommendations;
             }
-            // Привязываем запись к консультации, если указан ApplicationId
+
+            Console.WriteLine($"=== РЕЗУЛЬТАТ entry ===");
+            Console.WriteLine($"entry.Complaints: '{entry.Complaints}'");
+            Console.WriteLine($"entry.PreviousDiagnoses: '{entry.PreviousDiagnoses}'");
+            Console.WriteLine($"entry.CurrentMedications: '{entry.CurrentMedications}'");
+            Console.WriteLine($"entry.Conclusion: '{entry.Conclusion}'");
+
+            // Привязываем запись к консультации
             if (dto.ApplicationId.HasValue)
             {
                 entry.ConsultationId = await _context.Consultations
@@ -202,21 +296,15 @@ namespace TelemedicineSystem.API.Controllers
                     .Select(c => (Guid?)c.ConsultationId)
                     .FirstOrDefaultAsync();
             }
+
             _context.Entries.Add(entry);
             await _context.SaveChangesAsync();
 
-            // Обработка медикаментов
+            // Медикаменты
             if (dto.Medications != null && dto.Medications.Any())
             {
                 foreach (var med in dto.Medications)
                 {
-                    // Если дозировка или частота новые — обновляем справочник
-                    var medication = await _context.Medications.FindAsync(med.MedicationId);
-                    if (medication != null && !string.IsNullOrEmpty(med.Dosage))
-                        medication.Dosage = med.Dosage;
-                    if (medication != null && !string.IsNullOrEmpty(med.Frequency))
-                        medication.Frequency = med.Frequency;
-
                     _context.EntryMedications.Add(new EntryMedication
                     {
                         EntryMedicationId = Guid.NewGuid(),
@@ -227,7 +315,11 @@ namespace TelemedicineSystem.API.Controllers
             }
             else if (lastEntry != null)
             {
-                foreach (var em in lastEntry.EntryMedications)
+                var lastMeds = await _context.EntryMedications
+                    .Where(em => em.EntryId == lastEntry.EntryId)
+                    .ToListAsync();
+                Console.WriteLine($"Копируем медикаментов из предыдущей: {lastMeds.Count}");
+                foreach (var em in lastMeds)
                 {
                     _context.EntryMedications.Add(new EntryMedication
                     {
@@ -238,7 +330,7 @@ namespace TelemedicineSystem.API.Controllers
                 }
             }
 
-            // Копируем процедуры
+            // Процедуры
             if (dto.ProcedureIds != null && dto.ProcedureIds.Any())
             {
                 foreach (var procId in dto.ProcedureIds)
@@ -253,7 +345,10 @@ namespace TelemedicineSystem.API.Controllers
             }
             else if (lastEntry != null)
             {
-                foreach (var ep in lastEntry.EntryProcedures)
+                var lastProcs = await _context.EntryProcedures
+                    .Where(ep => ep.EntryId == lastEntry.EntryId)
+                    .ToListAsync();
+                foreach (var ep in lastProcs)
                 {
                     _context.EntryProcedures.Add(new EntryProcedure
                     {
@@ -264,7 +359,7 @@ namespace TelemedicineSystem.API.Controllers
                 }
             }
 
-            // Копируем анализы
+            // Анализы
             if (dto.AnalysisIds != null && dto.AnalysisIds.Any())
             {
                 foreach (var anId in dto.AnalysisIds)
@@ -279,7 +374,10 @@ namespace TelemedicineSystem.API.Controllers
             }
             else if (lastEntry != null)
             {
-                foreach (var ea in lastEntry.EntryAnalyses)
+                var lastAnalyses = await _context.EntryAnalyses
+                    .Where(ea => ea.EntryId == lastEntry.EntryId)
+                    .ToListAsync();
+                foreach (var ea in lastAnalyses)
                 {
                     _context.EntryAnalyses.Add(new EntryAnalysis
                     {
@@ -299,7 +397,6 @@ namespace TelemedicineSystem.API.Controllers
                 treatmentCourseId = course.TreatmentCourseId
             });
         }
-
         // 3. Завершить курс лечения
         [HttpPost("complete-course/{courseId}")]
         [Authorize(Roles = "Consultant")]
@@ -374,12 +471,23 @@ namespace TelemedicineSystem.API.Controllers
                     c.EndDate,
                     c.CauseOfEnd,
                     ConsultantFullName = c.Consultant.Surname + " " + c.Consultant.Name + " " + c.Consultant.MiddleName,
+                    // Жалобы и предв. диагноз из первой записи курса
+                    Complaints = c.Entries.OrderBy(e => e.CreatedAt).FirstOrDefault() != null
+                        ? c.Entries.OrderBy(e => e.CreatedAt).FirstOrDefault().Complaints
+                        : null,
+                    PreliminaryDiagnosis = c.Entries.OrderBy(e => e.CreatedAt).FirstOrDefault() != null
+                        ? c.Entries.OrderBy(e => e.CreatedAt).FirstOrDefault().Conclusion
+                        : null,
                     Entries = c.Entries.OrderByDescending(e => e.CreatedAt).Select(e => new
                     {
                         e.EntryId,
+                        e.Complaints,
+                        e.PreviousDiagnoses,
+                        e.CurrentMedications,
                         e.Conclusion,
                         e.Recommendations,
                         e.CreatedAt,
+                        e.ConsultationId,
                         Disease = e.Disease != null ? new { e.Disease.MkbCode, e.Disease.Name } : null,
                         Medications = e.EntryMedications.Select(em => new
                         {
@@ -397,7 +505,23 @@ namespace TelemedicineSystem.API.Controllers
                         {
                             ea.Analysis.AnalysisId,
                             ea.Analysis.Name
-                        })
+                        }),
+                        Referrals = _context.AnalysisReferrals
+                            .Where(r => r.EntryId == e.EntryId)
+                            .Select(r => new
+                            {
+                                r.ReferralId,
+                                r.OrganizationName,
+                                r.ReferralPurpose,
+                                r.Tests,
+                                r.ServiceCode
+                            })
+                            .ToList(),
+                        // Документы, привязанные к консультации этой записи
+                        Documents = _context.Documents
+                            .Where(d => d.ConsultationId == e.ConsultationId)
+                            .Select(d => new { d.DocumentId, d.FileName, d.UploadDate })
+                            .ToList()
                     })
                 })
             };
@@ -498,6 +622,7 @@ namespace TelemedicineSystem.API.Controllers
         public List<MedicationEntryDto>? Medications { get; set; }
         public List<Guid>? ProcedureIds { get; set; }
         public List<Guid>? AnalysisIds { get; set; }
+        public List<ReferralEntryDto>? Referrals { get; set; }
         public string? Complaints { get; set; }
         public string? PreviousDiagnoses { get; set; }
         public string? CurrentMedications { get; set; }
@@ -526,6 +651,13 @@ namespace TelemedicineSystem.API.Controllers
         public string? OrganizationName { get; set; }
         public string? DoctorName { get; set; }
         public string? MkbCode { get; set; }
+        public string? ReferralPurpose { get; set; }
+        public string? Tests { get; set; }
+        public string? ServiceCode { get; set; }
+    }
+    public class ReferralEntryDto
+    {
+        public string? OrganizationName { get; set; }
         public string? ReferralPurpose { get; set; }
         public string? Tests { get; set; }
         public string? ServiceCode { get; set; }

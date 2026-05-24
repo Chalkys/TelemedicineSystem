@@ -365,10 +365,25 @@
         let thisCons = null;
         let isCallActive = false;
         let pendingOffer = null;
-        let ecDictionaries = null;
         const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
         function getRoleName(r) { const roles = { 'Patient': 'Пациент', 'Consultant': 'Консультант', 'Operator': 'Оператор' }; return roles[r] || r; }
+
+        function getAge(dateOfBirth) {
+            if (!dateOfBirth) return '—';
+            const today = new Date();
+            const birth = new Date(dateOfBirth);
+            let age = today.getFullYear() - birth.getFullYear();
+            const m = today.getMonth() - birth.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+            return age;
+        }
+
+        function getGenderLabel(gender) {
+            if (gender === 'Male') return 'Мужской';
+            if (gender === 'Female') return 'Женский';
+            return gender || '—';
+        }
 
         async function init() {
             if (!consultationId) { alert('Консультация не найдена'); return; }
@@ -394,10 +409,15 @@
                 const otherRole = role === 'Patient' ? 'Консультант' : 'Пациент';
                 document.getElementById('remoteLabel').textContent = otherName;
 
+                // Данные пациента (возраст, пол)
+                const patientAge = thisCons.patientDateOfBirth ? getAge(thisCons.patientDateOfBirth) : '—';
+                const patientGender = getGenderLabel(thisCons.patientGender);
+
                 document.getElementById('infoPanel').innerHTML = `
             <h3>${otherRole}:</h3>
             <p><strong>${otherName}</strong></p>
-            ${role === 'Patient' ? `<p>${thisCons.consultantSpecialty}</p>` : ''}
+            ${role === 'Patient' ? `<p>🏥 ${thisCons.consultantSpecialty}</p>` : ''}
+            ${role === 'Consultant' ? `<p>Возраст: ${patientAge} лет</p><p>Пол: ${patientGender}</p>` : ''}
             <p>📅 ${new Date(thisCons.date).toLocaleString()}</p>
             <p>📋 ${thisCons.subject}</p>
             <h4>📎 Документы</h4>
@@ -406,6 +426,24 @@
             <button class="btn btn-sm" onclick="document.getElementById('fileInput').click()" style="margin-top:8px;">+ Загрузить PDF</button>`;
 
                 updateStatusUI(thisCons.status);
+
+                // Автозаполнение формы из заявки
+                if (role === 'Consultant' && thisCons.applicationId) {
+                    try {
+                        const appResponse = await fetch(`${API_URL}/api/Application/${thisCons.applicationId}`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (appResponse.ok) {
+                            const appData = await appResponse.json();
+                            // Заполняем только если поля не были восстановлены из черновика
+                            if (!sessionStorage.getItem('pendingEntry')) {
+                                document.getElementById('ecComplaints').value = appData.complaints || '';
+                                document.getElementById('ecPrevDiagnoses').value = appData.previousDiagnoses || '';
+                                document.getElementById('ecCurrentMeds').value = appData.currentMedications || '';
+                            }
+                        }
+                    } catch (e) { console.error('Ошибка загрузки заявки:', e); }
+                }
 
                 const msgs = await fetch(`${API_URL}/api/Consultation/${consultationId}/messages`, { headers: { 'Authorization': `Bearer ${token}` } });
                 const messages = await msgs.json();
@@ -430,8 +468,29 @@
                     } catch (e) { console.error("Ошибка доступа к камере:", e); }
                 }
 
+                // Сначала автозаполняем из заявки
+                if (role === 'Consultant' && thisCons.applicationId) {
+                    try {
+                        const appResponse = await fetch(`${API_URL}/api/Application/${thisCons.applicationId}`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (appResponse.ok) {
+                            const appData = await appResponse.json();
+                            document.getElementById('ecComplaints').value = appData.complaints || '';
+                            document.getElementById('ecPrevDiagnoses').value = appData.previousDiagnoses || '';
+                            document.getElementById('ecCurrentMeds').value = appData.currentMedications || '';
+                        }
+                    } catch (e) { console.error('Ошибка загрузки заявки:', e); }
+                }
+
+                // Потом проверяем черновик (если есть) — он имеет приоритет над заявкой
                 if (role === 'Consultant') {
-                    setTimeout(() => restoreEntryFromSession(), 500);
+                    const savedEntry = sessionStorage.getItem('pendingEntry');
+                    if (savedEntry) {
+                        // Черновик есть — восстанавливаем его (перезаписывает данные из заявки)
+                        setTimeout(() => restoreEntryFromSession(), 300);
+                    }
+                    // Если черновика нет — остаются данные из заявки
                 }
 
                 loadDocuments();
@@ -491,9 +550,7 @@
                 const purpose = row.querySelector('.ec-ref-purpose')?.value || '';
                 const tests = row.querySelector('.ec-ref-tests')?.value || '';
                 const serviceCode = row.querySelector('.ec-ref-service-code')?.value || '';
-                if (tests) {
-                    referrals.push({ organizationName: org, referralPurpose: purpose, tests, serviceCode });
-                }
+                if (tests) referrals.push({ organizationName: org, referralPurpose: purpose, tests, serviceCode });
             });
 
             sessionStorage.setItem('pendingEntry', JSON.stringify({
@@ -517,7 +574,6 @@
                 document.getElementById('ecCurrentMeds').value = data.currentMeds || '';
                 document.getElementById('ecConclusion').value = data.conclusion || '';
 
-                // Восстанавливаем направления
                 if (data.referrals && data.referrals.length > 0) {
                     const container = document.getElementById('ecReferralsContainer');
                     container.innerHTML = '';
@@ -531,96 +587,12 @@
                     </div>
                     <input type="text" class="ec-ref-org" placeholder="Медицинская организация" value="${ref.organizationName || ''}">
                     <input type="text" class="ec-ref-purpose" placeholder="Цель исследования" value="${ref.referralPurpose || ''}">
-                    <textarea class="ec-ref-tests" rows="2" placeholder="Тесты (названия анализов)">${ref.tests || ''}</textarea>
-                    <input type="text" class="ec-ref-service-code" placeholder="Код услуги (ОМС/ДМС)" value="${ref.serviceCode || ''}">`;
+                    <textarea class="ec-ref-tests" rows="2" placeholder="Тесты">${ref.tests || ''}</textarea>
+                    <input type="text" class="ec-ref-service-code" placeholder="Код услуги" value="${ref.serviceCode || ''}">`;
                         container.appendChild(row);
                     });
                 }
             } catch (e) { console.error('Ошибка восстановления:', e); }
-        }
-
-        // Обновлённая endConsultation
-        async function endConsultation() {
-            if (!confirm('Завершить консультацию?')) return;
-            if (isCallActive) await hangUp();
-            if (role === 'Consultant') {
-                const referrals = [];
-                document.querySelectorAll('#ecReferralsContainer > .ec-referral-row').forEach(row => {
-                    const org = row.querySelector('.ec-ref-org')?.value || '';
-                    const purpose = row.querySelector('.ec-ref-purpose')?.value || '';
-                    const tests = row.querySelector('.ec-ref-tests')?.value || '';
-                    const serviceCode = row.querySelector('.ec-ref-service-code')?.value || '';
-                    if (tests) referrals.push({ organizationName: org, referralPurpose: purpose, tests, serviceCode });
-                });
-                sessionStorage.setItem('pendingEntry', JSON.stringify({
-                    complaints: document.getElementById('ecComplaints')?.value || '',
-                    prevDiagnoses: document.getElementById('ecPrevDiagnoses')?.value || '',
-                    currentMeds: document.getElementById('ecCurrentMeds')?.value || '',
-                    conclusion: document.getElementById('ecConclusion')?.value || '',
-                    referrals: referrals
-                }));
-            }
-            try {
-                await fetch(`${API_URL}/api/Consultation/${consultationId}/complete`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
-                updateStatusUI('completed');
-                document.getElementById('btnEnd').style.display = 'none';
-                if (role === 'Consultant') window.location.href = 'consultant_dashboard.html';
-            } catch (e) { console.error(e); }
-        }
-
-        function saveEntryToSession() {
-            const medications = [];
-            document.querySelectorAll('.med-row-inline').forEach(row => {
-                const select = row.querySelector('select');
-                const dosage = row.querySelector('.ec-med-dosage')?.value || '';
-                const frequency = row.querySelector('.ec-med-frequency')?.value || '';
-                if (select && select.value) {
-                    const name = select.options[select.selectedIndex].text;
-                    medications.push({ medicationId: select.value, name, dosage, frequency });
-                }
-            });
-            sessionStorage.setItem('pendingEntry', JSON.stringify({
-                complaints: document.getElementById('ecComplaints')?.value || '',
-                prevDiagnoses: document.getElementById('ecPrevDiagnoses')?.value || '',
-                currentMeds: document.getElementById('ecCurrentMeds')?.value || '',
-                conclusion: document.getElementById('ecConclusion')?.value || '',
-                diseaseId: document.getElementById('ecDiseaseId')?.value || '',
-                mkbCode: document.getElementById('ecMkbSearch')?.value || '',
-                medications: medications
-            }));
-            document.getElementById('ecSaveStatus').innerHTML = '<span style="color:#28a745;">✅ Черновик сохранён!</span>';
-            setTimeout(() => { const s = document.getElementById('ecSaveStatus'); if (s) s.innerHTML = ''; }, 3000);
-        }
-
-        function restoreEntryFromSession() {
-            const savedEntry = sessionStorage.getItem('pendingEntry');
-            if (!savedEntry) return;
-            try {
-                const data = JSON.parse(savedEntry);
-                document.getElementById('ecComplaints').value = data.complaints || '';
-                document.getElementById('ecPrevDiagnoses').value = data.prevDiagnoses || '';
-                document.getElementById('ecCurrentMeds').value = data.currentMeds || '';
-                document.getElementById('ecConclusion').value = data.conclusion || '';
-                if (data.diseaseId) document.getElementById('ecDiseaseId').value = data.diseaseId;
-                if (data.mkbCode) document.getElementById('ecMkbSearch').value = data.mkbCode;
-                if (data.medications && data.medications.length > 0) {
-                    loadEcDictionaries().then(dict => {
-                        const container = document.getElementById('ecMedsContainer');
-                        container.innerHTML = '';
-                        data.medications.forEach(med => {
-                            const row = document.createElement('div');
-                            row.className = 'med-row-inline';
-                            const options = dict.medications.map(m => `<option value="${m.medicationId}" ${m.medicationId === med.medicationId ? 'selected' : ''}>${m.name}</option>`).join('');
-                            row.innerHTML = `
-                        <select onchange="onEcMedSelect(this)"><option value="">— Выберите —</option>${options}</select>
-                        <input type="text" class="ec-med-dosage" placeholder="Дозировка" value="${med.dosage || ''}">
-                        <input type="text" class="ec-med-frequency" placeholder="Кратность" value="${med.frequency || ''}">
-                        <button type="button" onclick="this.parentElement.remove()">✕</button>`;
-                            container.appendChild(row);
-                        });
-                    });
-                }
-            } catch (e) { }
         }
 
         // ===== SIGNALR =====
@@ -753,30 +725,35 @@
             if (!confirm('Завершить консультацию?')) return;
             if (isCallActive) await hangUp();
             if (role === 'Consultant') {
-                const medications = [];
-                document.querySelectorAll('.med-row-inline').forEach(row => {
-                    const select = row.querySelector('select');
-                    const dosage = row.querySelector('.ec-med-dosage')?.value || '';
-                    const frequency = row.querySelector('.ec-med-frequency')?.value || '';
-                    if (select && select.value) {
-                        medications.push({ medicationId: select.value, name: select.options[select.selectedIndex].text, dosage, frequency });
-                    }
+                const referrals = [];
+                document.querySelectorAll('#ecReferralsContainer > .ec-referral-row').forEach(row => {
+                    const org = row.querySelector('.ec-ref-org')?.value || '';
+                    const purpose = row.querySelector('.ec-ref-purpose')?.value || '';
+                    const tests = row.querySelector('.ec-ref-tests')?.value || '';
+                    const serviceCode = row.querySelector('.ec-ref-service-code')?.value || '';
+                    if (tests) referrals.push({ organizationName: org, referralPurpose: purpose, tests, serviceCode });
                 });
                 sessionStorage.setItem('pendingEntry', JSON.stringify({
                     complaints: document.getElementById('ecComplaints')?.value || '',
                     prevDiagnoses: document.getElementById('ecPrevDiagnoses')?.value || '',
                     currentMeds: document.getElementById('ecCurrentMeds')?.value || '',
                     conclusion: document.getElementById('ecConclusion')?.value || '',
-                    diseaseId: document.getElementById('ecDiseaseId')?.value || '',
-                    mkbCode: document.getElementById('ecMkbSearch')?.value || '',
-                    medications: medications
+                    referrals: referrals
                 }));
             }
             try {
                 await fetch(`${API_URL}/api/Consultation/${consultationId}/complete`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
                 updateStatusUI('completed');
                 document.getElementById('btnEnd').style.display = 'none';
-                if (role === 'Consultant') window.location.href = 'consultant_dashboard.html';
+                if (role === 'Consultant') {
+                    // Сохраняем ID пациента и заявки для перехода
+                    sessionStorage.setItem('autoOpenEntry', JSON.stringify({
+                        patientId: thisCons.patientId,
+                        applicationId: thisCons.applicationId,
+                        patientFullName: thisCons.patientFullName
+                    }));
+                    window.location.href = 'consultant_dashboard.html';
+                }
             } catch (e) { console.error(e); }
         }
 
@@ -831,7 +808,7 @@
                 }).catch(e => { });
         }
 
-    init();
+        init();
     </script>
     </body>
 </html>

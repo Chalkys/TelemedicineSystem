@@ -141,6 +141,31 @@ namespace TelemedicineSystem.API.Controllers
             return Ok(applications);
         }
 
+        // Получить заявку по ID (для автозаполнения в консультации)
+        [HttpGet("{applicationId}")]
+        [Authorize]
+        public async Task<IActionResult> GetApplication(Guid applicationId)
+        {
+            var application = await _context.Applications
+                .Include(a => a.Patient)
+                .FirstOrDefaultAsync(a => a.ApplicationId == applicationId);
+
+            if (application == null)
+                return NotFound("Заявка не найдена");
+
+            return Ok(new
+            {
+                application.ApplicationId,
+                application.Subject,
+                application.Complaints,
+                application.PreviousDiagnoses,
+                application.CurrentMedications,
+                application.Status,
+                application.CreatedAt,
+                PatientFullName = application.Patient.Surname + " " + application.Patient.Name + " " + application.Patient.MiddleName
+            });
+        }
+
         // 4. Принять заявку (консультант)
         [HttpPost("{applicationId}/accept")]
         [Authorize(Roles = "Consultant")]

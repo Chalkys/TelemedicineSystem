@@ -197,28 +197,21 @@
                 const r = await fetch(`${API_URL}/api/Consultation/my`, { headers: { 'Authorization': `Bearer ${token}` } });
                 const consultations = await r.json();
                 const cons = consultations.find(c => c.applicationId === applicationId);
-                if (cons) {
-                    window.location.href = `consultation.html?id=${cons.consultationId}`;
-                } else {
-                    alert('Консультация ещё не создана.');
-                }
-            } catch (e) {
-                alert('Ошибка: ' + e.message);
-            }
+                if (cons) window.location.href = `consultation.html?id=${cons.consultationId}`;
+                else alert('Консультация ещё не создана.');
+            } catch (e) { alert('Ошибка: ' + e.message); }
         }
 
         // ===== ЗАЯВКИ =====
         function showApplications() {
             document.getElementById('mainContent').innerHTML = `
-                    <div class="card">
-                        <h3>📋 Заявки на консультацию</h3>
+                    <div class="card"><h3>📋 Заявки на консультацию</h3>
                         <div class="tabs">
                             <button class="tab-btn active" onclick="switchTab('new')">Новые</button>
                             <button class="tab-btn" onclick="switchTab('no-record')">Без записи</button>
                             <button class="tab-btn" onclick="switchTab('completed')">Завершённые</button>
                         </div>
-                        <div id="appList">Загрузка...</div>
-                    </div>`;
+                        <div id="appList">Загрузка...</div></div>`;
             currentTab = 'new';
             loadApplications();
         }
@@ -226,10 +219,7 @@
         function switchTab(tab) {
             currentTab = tab;
             document.querySelectorAll('.tab-btn').forEach((b, i) => {
-                b.classList.toggle('active',
-                    (i === 0 && tab === 'new') ||
-                    (i === 1 && tab === 'no-record') ||
-                    (i === 2 && tab === 'completed'));
+                b.classList.toggle('active', (i === 0 && tab === 'new') || (i === 1 && tab === 'no-record') || (i === 2 && tab === 'completed'));
             });
             loadApplications();
         }
@@ -237,68 +227,36 @@
         async function loadApplications() {
             document.getElementById('appList').innerHTML = 'Загрузка...';
             let url, emptyMsg;
-
-            if (currentTab === 'new') {
-                url = `${API_URL}/api/Application/my-new`;
-                emptyMsg = 'Нет новых заявок.';
-            } else if (currentTab === 'no-record') {
-                url = `${API_URL}/api/Application/my-completed`;
-                emptyMsg = 'Нет консультаций без записи.';
-            } else {
-                url = `${API_URL}/api/Application/my-completed-with-record`;
-                emptyMsg = 'Нет завершённых консультаций.';
-            }
+            if (currentTab === 'new') { url = `${API_URL}/api/Application/my-new`; emptyMsg = 'Нет новых заявок.'; }
+            else if (currentTab === 'no-record') { url = `${API_URL}/api/Application/my-completed`; emptyMsg = 'Нет консультаций без записи.'; }
+            else { url = `${API_URL}/api/Application/my-completed-with-record`; emptyMsg = 'Нет завершённых консультаций.'; }
 
             try {
                 const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
                     const apps = await response.json();
-
                     let filteredApps = apps;
-                    if (currentTab === 'no-record') {
-                        filteredApps = apps.filter(app => !app.hasEntry);
-                    } else if (currentTab === 'completed') {
-                        filteredApps = apps.filter(app => app.hasEntry);
-                    }
+                    if (currentTab === 'no-record') filteredApps = apps.filter(app => !app.hasEntry);
+                    else if (currentTab === 'completed') filteredApps = apps.filter(app => app.hasEntry);
 
-                    if (filteredApps.length === 0) {
-                        document.getElementById('appList').innerHTML = `<p>${emptyMsg}</p>`;
-                        return;
-                    }
+                    if (filteredApps.length === 0) { document.getElementById('appList').innerHTML = `<p>${emptyMsg}</p>`; return; }
 
                     let html = `<table><tr><th>Пациент</th><th>Причина обращения</th><th>Дата консультации</th><th>Приём</th><th>Статус</th><th>Действия</th></tr>`;
                     filteredApps.forEach(app => {
-                        const st = currentTab === 'new' ? 'Ожидает звонка' :
-                            currentTab === 'no-record' ? 'Требуется запись' : 'Завершена';
-                        const sc = currentTab === 'new' ? '#ffc107' :
-                            currentTab === 'no-record' ? '#dc3545' : '#28a745';
+                        const st = currentTab === 'new' ? 'Ожидает звонка' : currentTab === 'no-record' ? 'Требуется запись' : 'Завершена';
+                        const sc = currentTab === 'new' ? '#ffc107' : currentTab === 'no-record' ? '#dc3545' : '#28a745';
                         const consultDate = app.consultationDate ? new Date(app.consultationDate).toLocaleString() : '—';
-                        const isPrimary = app.isPrimary ? 'Первичный' : 'Вторичный';
                         const badgeClass = app.isPrimary ? 'badge-primary' : 'badge-secondary';
-
                         let actions = '';
-                        if (currentTab === 'new') {
-                            actions = `<button class="btn btn-entry" onclick="openConsultation('${app.applicationId}')">💬 Консультация</button>`;
-                        } else if (currentTab === 'no-record') {
-                            actions = `<button class="btn btn-entry" onclick="showAddEntry('${app.patientId}','${app.applicationId}','${app.patientFullName}')">Запись</button>`;
-                        } else if (currentTab === 'completed') {
-                            actions = `<button class="btn btn-view" onclick="showPatientMedicalBook('${app.patientId}','${app.patientFullName}')">Медкарта</button>`;
-                        }
-
-                        html += `<tr>
-                                <td>${app.patientFullName}</td>
-                                <td>${app.complaints || 'Причина обращения не указана'}</td>
-                                <td>${consultDate}</td>
-                                <td><span class="badge ${badgeClass}">${isPrimary}</span></td>
-                                <td style="color:${sc};font-weight:bold;">${st}</td>
-                                <td>${actions}</td></tr>`;
+                        if (currentTab === 'new') actions = `<button class="btn btn-entry" onclick="openConsultation('${app.applicationId}')">💬 Консультация</button>`;
+                        else if (currentTab === 'no-record') actions = `<button class="btn btn-entry" onclick="showAddEntry('${app.patientId}','${app.applicationId}','${app.patientFullName}')">Запись</button>`;
+                        else actions = `<button class="btn btn-view" onclick="showPatientMedicalBook('${app.patientId}','${app.patientFullName}')">Медкарта</button>`;
+                        html += `<tr><td>${app.patientFullName}</td><td>${app.complaints || '—'}</td><td>${consultDate}</td><td><span class="badge ${badgeClass}">${app.isPrimary ? 'Первичный' : 'Вторичный'}</span></td><td style="color:${sc};font-weight:bold;">${st}</td><td>${actions}</td></tr>`;
                     });
                     html += '</table>';
                     document.getElementById('appList').innerHTML = html;
                 }
-            } catch (err) {
-                document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
-            }
+            } catch (err) { document.getElementById('appList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
         }
 
         // ===== ПАЦИЕНТЫ =====
@@ -308,26 +266,18 @@
                 const response = await fetch(`${API_URL}/api/MedicalBook/my-patients`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
                     const patients = await response.json();
-                    if (patients.length === 0) {
-                        document.getElementById('patientList').innerHTML = '<p>У вас пока нет пациентов.</p>';
-                        return;
-                    }
+                    if (patients.length === 0) { document.getElementById('patientList').innerHTML = '<p>У вас пока нет пациентов.</p>'; return; }
                     let html = `<table><tr><th>ФИО</th><th>Дата рождения</th><th>Пол</th><th>Действия</th></tr>`;
                     patients.forEach(p => {
-                        html += `<tr>
-                                <td>${p.fullName}</td><td>${new Date(p.dateOfBirth).toLocaleDateString()}</td>
-                                <td>${p.gender === 'Male' ? 'Мужской' : 'Женский'}</td>
-                                <td><button class="btn btn-view" onclick="showPatientMedicalBook('${p.patientId}','${p.fullName}')">Медкарта</button></td>
-                            </tr>`;
+                        html += `<tr><td>${p.fullName}</td><td>${new Date(p.dateOfBirth).toLocaleDateString()}</td><td>${p.gender === 'Male' ? 'Мужской' : 'Женский'}</td><td><button class="btn btn-view" onclick="showPatientMedicalBook('${p.patientId}','${p.fullName}')">Медкарта</button></td></tr>`;
                     });
                     html += '</table>';
                     document.getElementById('patientList').innerHTML = html;
                 }
-            } catch (err) {
-                document.getElementById('patientList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
-            }
+            } catch (err) { document.getElementById('patientList').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
         }
 
+        // ===== МЕДКАРТА ПАЦИЕНТА =====
         async function showPatientMedicalBook(patientId, fullName) {
             document.getElementById('mainContent').innerHTML = `<div class="card"><h3>📄 Медкарта: ${fullName}</h3><div id="medBookContent">Загрузка...</div>
                     <button onclick="showPatients()" style="margin-top:15px;" class="btn btn-view">← Назад</button></div>`;
@@ -343,24 +293,32 @@
                             html += `<div style="background:#e8f5e9;border-radius:8px;padding:15px;margin-bottom:15px;border-left:4px solid #28a745;">
                                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
                                         <p><strong>📋 Курс лечения</strong> (${course.status === 'active' ? 'Активен' : 'Завершён'})</p>
-                                        ${course.status === 'active' ?
-                                    `<button class="btn btn-reject" onclick="showCompleteCourse('${course.treatmentCourseId}','${patientId}','${fullName}')" style="font-size:12px;padding:5px 12px;">Завершить курс</button>`
-                                    : ''}
+                                        ${course.status === 'active' ? `<button class="btn btn-reject" onclick="showCompleteCourse('${course.treatmentCourseId}','${patientId}','${fullName.replace(/'/g, "\\'")}')" style="font-size:12px;padding:5px 12px;">Завершить курс</button>` : ''}
                                     </div>
                                     <p><strong>👨‍⚕️ Врач:</strong> ${course.consultantFullName}</p>
+                                    ${course.complaints ? `<p><strong>🩺 Жалобы:</strong> ${course.complaints}</p>` : ''}
+                                    ${course.preliminaryDiagnosis ? `<p><strong>📝 Предв. диагноз:</strong> ${course.preliminaryDiagnosis}</p>` : ''}
                                     <p><strong>📅 Начат:</strong> ${new Date(course.startDate).toLocaleDateString()}</p>
                                     ${course.endDate ? `<p><strong>📅 Завершён:</strong> ${new Date(course.endDate).toLocaleDateString()}</p>` : ''}
                                     ${course.causeOfEnd ? `<p><strong>📝 Причина завершения:</strong> ${course.causeOfEnd}</p>` : ''}
                                     <p style="margin-top:10px;"><strong>Записи:</strong></p>`;
                             course.entries.forEach(entry => {
                                 html += `<div style="background:white;border-radius:5px;padding:10px;margin:5px 0;">
-                                        <p><strong>📅 ${new Date(entry.createdAt).toLocaleDateString()}</strong></p>
-                                        ${entry.conclusion ? `<p>📝 ${entry.conclusion}</p>` : ''}
+                                        <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;">
+                                            <p><strong>📅 ${new Date(entry.createdAt).toLocaleDateString()}</strong></p>
+                                            ${entry.consultationId ? `<button class="btn btn-view" onclick="window.open('consultation.html?id=${entry.consultationId}','_blank')" style="font-size:12px;padding:5px 10px;">💬 Консультация</button>` : ''}
+                                        </div>
+                                        ${entry.complaints ? `<p>🩺 <strong>Жалобы:</strong> ${entry.complaints}</p>` : ''}
+                                        ${entry.previousDiagnoses ? `<p>📋 <strong>Ранее поставленные диагнозы:</strong> ${entry.previousDiagnoses}</p>` : ''}
+                                        ${entry.currentMedications ? `<p>💊 <strong>Принимаемые медикаменты:</strong> ${entry.currentMedications}</p>` : ''}
                                         ${entry.disease ? `<p>🏥 МКБ-10: ${entry.disease.mkbCode} — ${entry.disease.name}</p>` : ''}
+                                        ${entry.conclusion ? `<p>📝 ${entry.conclusion}</p>` : ''}
                                         ${entry.medications && entry.medications.length > 0 ? `<p>💊 Медикаменты: ${entry.medications.map(m => `${m.name} (${m.dosage || ''}, ${m.frequency || ''})`).join(', ')}</p>` : ''}
                                         ${entry.procedures && entry.procedures.length > 0 ? `<p>🏥 Процедуры: ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
                                         ${entry.analyses && entry.analyses.length > 0 ? `<p>🔬 Анализы: ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
+                                        ${entry.referrals && entry.referrals.length > 0 ? `<div style="margin-top:6px;"><strong>🔬 Направления на анализ:</strong> ${entry.referrals.map(r => `${r.organizationName ? '🏥 ' + r.organizationName + ': ' : ''}${r.tests}${r.referralPurpose ? ' (' + r.referralPurpose + ')' : ''}${r.serviceCode ? ' [код: ' + r.serviceCode + ']' : ''}`).join('<br>')}</div>` : ''}
                                         ${entry.recommendations ? `<p>📋 Рекомендации: ${entry.recommendations}</p>` : ''}
+                                        ${entry.documents && entry.documents.length > 0 ? `<div style="margin-top:8px;"><strong>📎 Документы:</strong> ${entry.documents.map(d => `<a href="#" onclick="downloadDocFromMedbook('${d.documentId}','${d.fileName.replace(/'/g, "\\'")}');return false;" style="color:#11998e;margin-left:5px;">📄 ${d.fileName}</a>`).join('')}</div>` : ''}
                                     </div>`;
                             });
                             html += `</div>`;
@@ -368,16 +326,22 @@
                     }
                     document.getElementById('medBookContent').innerHTML = html;
                 }
-            } catch (err) {
-                document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
-            }
+            } catch (err) { document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
+        }
+
+        function downloadDocFromMedbook(docId, fileName) {
+            fetch(`${API_URL}/api/Documents/${docId}/download`, { headers: { 'Authorization': `Bearer ${token}` } })
+                .then(r => r.blob()).then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = fileName;
+                    document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+                }).catch(e => { });
         }
 
         // ===== ЗАВЕРШЕНИЕ КУРСА =====
         function showCompleteCourse(courseId, patientId, patientFullName) {
             document.getElementById('mainContent').innerHTML = `
-                    <div class="card">
-                        <h3>🏁 Завершение курса лечения</h3>
+                    <div class="card"><h3>🏁 Завершение курса лечения</h3>
                         <p><strong>Пациент:</strong> ${patientFullName}</p>
                         <form id="completeForm">
                             <label>Причина завершения (обязательно):</label>
@@ -388,7 +352,7 @@
                             <textarea id="recommendations" rows="2" placeholder="Профилактика, образ жизни..."></textarea>
                             <div style="display:flex;gap:10px;margin-top:15px;">
                                 <button type="submit" class="btn btn-accept">Завершить курс</button>
-                                <button type="button" onclick="showPatientMedicalBook('${patientId}','${patientFullName}')" class="btn btn-reject">Отмена</button>
+                                <button type="button" onclick="showPatientMedicalBook('${patientId}','${patientFullName.replace(/'/g, "\\'")}')" class="btn btn-reject">Отмена</button>
                             </div>
                         </form>
                         <div id="completeResult" style="margin-top:15px;"></div>
@@ -403,8 +367,7 @@
                 };
                 try {
                     const response = await fetch(`${API_URL}/api/MedicalBook/complete-course/${courseId}`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                        method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify(body)
                     });
                     if (response.ok) {
@@ -423,28 +386,42 @@
         // ===== ФОРМА ЗАПИСИ =====
         async function showAddEntry(patientId, applicationId, patientFullName) {
             const dict = await loadDictionaries();
+
+            // Загружаем данные предыдущей записи
+            let prevComplaints = '', prevDiagnoses = '', prevMeds = '', prevConclusion = '', prevDiseaseId = '', prevMkbCode = '';
+            let prevMedications = [];
+            try {
+                const mbResponse = await fetch(`${API_URL}/api/MedicalBook/patient/${patientId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (mbResponse.ok) {
+                    const mbData = await mbResponse.json();
+                    const activeCourse = mbData.courses?.find(c => c.status === 'active');
+                    if (activeCourse && activeCourse.entries && activeCourse.entries.length > 0) {
+                        const lastEntry = activeCourse.entries[0];
+                        prevComplaints = lastEntry.complaints || '';
+                        prevDiagnoses = lastEntry.previousDiagnoses || '';
+                        prevMeds = lastEntry.currentMedications || '';
+                        prevConclusion = lastEntry.conclusion || '';
+                        prevDiseaseId = lastEntry.disease?.diseaseId || '';
+                        prevMkbCode = lastEntry.disease ? `${lastEntry.disease.mkbCode} — ${lastEntry.disease.name}` : '';
+                        prevMedications = lastEntry.medications || [];
+                    }
+                }
+            } catch (e) { console.error('Ошибка загрузки предыдущей записи:', e); }
+
             document.getElementById('mainContent').innerHTML = `
-                    <div class="card">
-                        <h3>📝 Новая запись в медкарту</h3>
+                    <div class="card"><h3>📝 Новая запись в медкарту</h3>
                         <p><strong>Пациент:</strong> ${patientFullName}</p>
                         <form id="entryForm">
-                            <label>Причина обращения (жалобы):</label>
-                            <textarea id="complaints" rows="2"></textarea>
-                            <label>Ранее поставленные диагнозы:</label>
-                            <textarea id="prevDiagnoses" rows="2"></textarea>
-                            <label>Принимаемые медикаменты:</label>
-                            <textarea id="currentMeds" rows="2"></textarea>
-                            <label>Предварительный диагноз:</label>
-                            <textarea id="conclusion" rows="2"></textarea>
-                            <label>МКБ-10 (предположительный код):</label>
-                            <input type="text" id="mkbSearch" placeholder="Введите код или название..." oninput="searchMkb()">
+                            <label>Причина обращения (жалобы):</label><textarea id="complaints" rows="2"></textarea>
+                            <label>Ранее поставленные диагнозы:</label><textarea id="prevDiagnoses" rows="2"></textarea>
+                            <label>Принимаемые медикаменты:</label><textarea id="currentMeds" rows="2"></textarea>
+                            <label>Предварительный диагноз:</label><textarea id="conclusion" rows="2"></textarea>
+                            <label>МКБ-10:</label><input type="text" id="mkbSearch" placeholder="Введите код или название..." oninput="searchMkb()">
                             <select id="diseaseId" style="display:none;"></select>
                             <div id="mkbResults" style="margin-bottom:10px;max-height:150px;overflow-y:auto;"></div>
-                            <label>💊 Медикаменты:</label>
-                            <div id="medsContainer"></div>
+                            <label>💊 Медикаменты:</label><div id="medsContainer"></div>
                             <button type="button" class="btn btn-sm" onclick="addMedRow()">+ Добавить лекарство</button>
-                            <label style="margin-top:10px;">🔬 Направления на анализ:</label>
-                            <div id="referralsContainer"></div>
+                            <label style="margin-top:10px;">🔬 Направления на анализ:</label><div id="referralsContainer"></div>
                             <button type="button" class="btn btn-sm" onclick="addReferralRow()">+ Направление на анализ</button>
                             <div style="display:flex;gap:10px;margin-top:15px;">
                                 <button type="submit" class="btn btn-accept">Сохранить запись</button>
@@ -455,37 +432,60 @@
                     </div>`;
 
             window._entryData = { patientId, applicationId, patientFullName, dict };
-            addMedRow();
-            // Восстанавливаем данные из sessionStorage
+
+            // Заполняем форму
             const savedEntry = sessionStorage.getItem('pendingEntry');
+            let entryData = {};
+
             if (savedEntry) {
-                const data = JSON.parse(savedEntry);
+                entryData = JSON.parse(savedEntry);
                 sessionStorage.removeItem('pendingEntry');
+            }
 
-                document.getElementById('complaints').value = data.complaints || '';
-                document.getElementById('prevDiagnoses').value = data.prevDiagnoses || '';
-                document.getElementById('currentMeds').value = data.currentMeds || '';
-                document.getElementById('conclusion').value = data.conclusion || '';
+            // Базовые значения: сначала из предыдущей записи, потом переопределяем из черновика
+            document.getElementById('complaints').value = entryData.complaints || prevComplaints || '';
+            document.getElementById('prevDiagnoses').value = entryData.prevDiagnoses || prevDiagnoses || '';
+            document.getElementById('currentMeds').value = entryData.currentMeds || prevMeds || '';
+            document.getElementById('conclusion').value = entryData.conclusion || prevConclusion || '';
+            if (entryData.diseaseId) document.getElementById('diseaseId').value = entryData.diseaseId;
+            else if (prevDiseaseId) document.getElementById('diseaseId').value = prevDiseaseId;
+            if (entryData.mkbCode) document.getElementById('mkbSearch').value = entryData.mkbCode;
+            else if (prevMkbCode) document.getElementById('mkbSearch').value = prevMkbCode;
 
-                // Восстанавливаем направления на анализы
-                if (data.referrals && data.referrals.length > 0) {
-                    const container = document.getElementById('referralsContainer');
-                    container.innerHTML = '';
-                    data.referrals.forEach(ref => {
-                        const row = document.createElement('div');
-                        row.style.cssText = 'background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:10px;';
-                        row.innerHTML = `
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <strong>Направление</strong>
-                    <button type="button" class="btn btn-reject" onclick="this.parentElement.parentElement.remove()" style="padding:4px 8px;font-size:11px;">✕</button>
-                </div>
-                <input type="text" class="ref-org" placeholder="Медицинская организация" value="${ref.organizationName || ''}">
-                <input type="text" class="ref-purpose" placeholder="Цель исследования" value="${ref.referralPurpose || ''}">
-                <textarea class="ref-tests" rows="2" placeholder="Тесты">${ref.tests || ''}</textarea>
-                <input type="text" class="ref-service-code" placeholder="Код услуги" value="${ref.serviceCode || ''}">`;
-                        container.appendChild(row);
-                    });
-                }
+            // Направления — только из черновика
+            if (entryData.referrals && entryData.referrals.length > 0) {
+                const container = document.getElementById('referralsContainer');
+                container.innerHTML = '';
+                entryData.referrals.forEach(ref => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:10px;';
+                    row.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><strong>Направление</strong><button type="button" class="btn btn-reject" onclick="this.parentElement.parentElement.remove()" style="padding:4px 8px;font-size:11px;">✕</button></div>
+            <input type="text" class="ref-org" placeholder="Медицинская организация" value="${ref.organizationName || ''}">
+            <input type="text" class="ref-purpose" placeholder="Цель исследования" value="${ref.referralPurpose || ''}">
+            <textarea class="ref-tests" rows="2" placeholder="Тесты">${ref.tests || ''}</textarea>
+            <input type="text" class="ref-service-code" placeholder="Код услуги" value="${ref.serviceCode || ''}">`;
+                    container.appendChild(row);
+                });
+            }
+
+            // Медикаменты: приоритет — черновик → предыдущая запись
+            const medsToShow = (entryData.medications && entryData.medications.length > 0) ? entryData.medications : prevMedications;
+            if (medsToShow.length > 0) {
+                const medsContainer = document.getElementById('medsContainer');
+                medsContainer.innerHTML = '';
+                medsToShow.forEach(med => {
+                    const row = document.createElement('div');
+                    row.className = 'med-row';
+                    row.style.cssText = 'display:flex;gap:8px;align-items:end;margin-bottom:10px;flex-wrap:wrap;';
+                    const options = (window._entryData?.dict?.medications || []).map(m => `<option value="${m.medicationId}" ${m.medicationId === med.medicationId ? 'selected' : ''}>${m.name}</option>`).join('');
+                    row.innerHTML = `<select class="med-select" style="flex:2;min-width:180px;" onchange="onMedSelect(this)"><option value="">— Выберите —</option>${options}</select>
+            <input type="text" class="med-dosage" placeholder="Дозировка" style="flex:1;min-width:120px;" value="${med.dosage || ''}">
+            <input type="text" class="med-frequency" placeholder="Кратность" style="flex:1;min-width:130px;" value="${med.frequency || ''}">
+            <button type="button" class="btn btn-reject" onclick="this.parentElement.remove()" style="padding:6px 10px;font-size:12px;">✕</button>`;
+                    medsContainer.appendChild(row);
+                });
+            } else {
+                addMedRow();
             }
 
             document.getElementById('entryForm').onsubmit = async function (e) {
@@ -493,64 +493,27 @@
                 const medications = [];
                 document.querySelectorAll('.med-row').forEach(row => {
                     const select = row.querySelector('.med-select');
-                    const dosage = row.querySelector('.med-dosage').value;
-                    const frequency = row.querySelector('.med-frequency').value;
-                    if (select.value) {
-                        medications.push({ medicationId: select.value, dosage, frequency });
-                    }
+                    if (select && select.value) medications.push({ medicationId: select.value, dosage: row.querySelector('.med-dosage')?.value || '', frequency: row.querySelector('.med-frequency')?.value || '' });
                 });
                 const referrals = [];
                 document.querySelectorAll('#referralsContainer > div').forEach(row => {
-                    const org = row.querySelector('.ref-org').value;
-                    const purpose = row.querySelector('.ref-purpose').value;
-                    const tests = row.querySelector('.ref-tests').value;
-                    const serviceCode = row.querySelector('.ref-service-code').value;
-                    if (tests) {
-                        referrals.push({
-                            organizationName: org,
-                            referralPurpose: purpose,
-                            tests: tests,
-                            serviceCode: serviceCode
-                        });
-                    }
+                    const tests = row.querySelector('.ref-tests')?.value || '';
+                    if (tests) referrals.push({ organizationName: row.querySelector('.ref-org')?.value || '', referralPurpose: row.querySelector('.ref-purpose')?.value || '', tests, serviceCode: row.querySelector('.ref-service-code')?.value || '' });
                 });
-                const body = {
-                    patientId, applicationId,
-                    complaints: document.getElementById('complaints').value,
-                    previousDiagnoses: document.getElementById('prevDiagnoses').value,
-                    currentMedications: document.getElementById('currentMeds').value,
-                    conclusion: document.getElementById('conclusion').value,
-                    diseaseId: document.getElementById('diseaseId').value || null,
-                    medications: medications.length > 0 ? medications : null,
-                    referrals: referrals.length > 0 ? referrals : null
-                };
+                const body = { patientId, applicationId, complaints: document.getElementById('complaints').value, previousDiagnoses: document.getElementById('prevDiagnoses').value, currentMedications: document.getElementById('currentMeds').value, conclusion: document.getElementById('conclusion').value, diseaseId: document.getElementById('diseaseId').value || null, medications: medications.length > 0 ? medications : null, referrals: referrals.length > 0 ? referrals : null };
                 try {
-                    const response = await fetch(`${API_URL}/api/MedicalBook/entry`, {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify(body)
-                    });
-                    if (response.ok) {
-                        document.getElementById('entryResult').innerHTML = '<div style="background:#d4edda;color:#155724;padding:15px;border-radius:5px;">✅ Запись сохранена!</div>';
-                        document.getElementById('entryForm').reset();
-                        setTimeout(() => showApplications(), 1000);
-                    } else {
-                        const err = await response.text();
-                        document.getElementById('entryResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ Ошибка: ${err}</div>`;
-                    }
-                } catch (err) {
-                    document.getElementById('entryResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ ${err.message}</div>`;
-                }
+                    const response = await fetch(`${API_URL}/api/MedicalBook/entry`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                    if (response.ok) { document.getElementById('entryResult').innerHTML = '<div style="background:#d4edda;color:#155724;padding:15px;border-radius:5px;">✅ Запись сохранена!</div>'; setTimeout(() => showApplications(), 1000); }
+                    else { const err = await response.text(); document.getElementById('entryResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ Ошибка: ${err}</div>`; }
+                } catch (err) { document.getElementById('entryResult').innerHTML = `<div style="background:#f8d7da;color:#721c24;padding:15px;border-radius:5px;">❌ ${err.message}</div>`; }
             };
         }
 
         function onMedSelect(select) {
             const selected = select.options[select.selectedIndex];
-            const dosage = selected.getAttribute('data-dosage') || '';
-            const frequency = selected.getAttribute('data-frequency') || '';
             const row = select.parentElement;
-            row.querySelector('.med-dosage').value = dosage;
-            row.querySelector('.med-frequency').value = frequency;
+            row.querySelector('.med-dosage').value = selected.getAttribute('data-dosage') || '';
+            row.querySelector('.med-frequency').value = selected.getAttribute('data-frequency') || '';
         }
 
         function addMedRow() {
@@ -559,13 +522,9 @@
             const row = document.createElement('div');
             row.className = 'med-row';
             row.style.cssText = 'display:flex;gap:8px;align-items:end;margin-bottom:10px;flex-wrap:wrap;';
-            row.innerHTML = `
-                    <select class="med-select" style="flex:2;min-width:180px;" onchange="onMedSelect(this)">
-                        <option value="">— Выберите —</option>
-                        ${dict.medications.map(m => `<option value="${m.medicationId}" data-dosage="${m.dosage || ''}" data-frequency="${m.frequency || ''}">${m.name}</option>`).join('')}
-                    </select>
+            row.innerHTML = `<select class="med-select" style="flex:2;min-width:180px;" onchange="onMedSelect(this)"><option value="">— Выберите —</option>${dict.medications.map(m => `<option value="${m.medicationId}" data-dosage="${m.dosage || ''}" data-frequency="${m.frequency || ''}">${m.name}</option>`).join('')}</select>
                     <input type="text" class="med-dosage" placeholder="Дозировка" style="flex:1;min-width:120px;">
-                    <input type="text" class="med-frequency" placeholder="Кратность приёма" style="flex:1;min-width:130px;">
+                    <input type="text" class="med-frequency" placeholder="Кратность" style="flex:1;min-width:130px;">
                     <button type="button" class="btn btn-reject" onclick="this.parentElement.remove()" style="padding:6px 10px;font-size:12px;">✕</button>`;
             container.appendChild(row);
         }
@@ -574,15 +533,11 @@
             const container = document.getElementById('referralsContainer');
             const row = document.createElement('div');
             row.style.cssText = 'background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:10px;';
-            row.innerHTML = `
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                        <strong>Направление</strong>
-                        <button type="button" class="btn btn-reject" onclick="this.parentElement.parentElement.remove()" style="padding:4px 8px;font-size:11px;">✕</button>
-                    </div>
+            row.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><strong>Направление</strong><button type="button" class="btn btn-reject" onclick="this.parentElement.parentElement.remove()" style="padding:4px 8px;font-size:11px;">✕</button></div>
                     <input type="text" class="ref-org" placeholder="Медицинская организация">
-                    <input type="text" class="ref-purpose" placeholder="Цель исследования (например: диагностика анемии)">
-                    <textarea class="ref-tests" rows="2" placeholder="Тесты (названия анализов)"></textarea>
-                    <input type="text" class="ref-service-code" placeholder="Код услуги (ОМС/ДМС)">`;
+                    <input type="text" class="ref-purpose" placeholder="Цель исследования">
+                    <textarea class="ref-tests" rows="2" placeholder="Тесты"></textarea>
+                    <input type="text" class="ref-service-code" placeholder="Код услуги">`;
             container.appendChild(row);
         }
 
@@ -594,10 +549,7 @@
                 if (r.ok) {
                     const items = await r.json();
                     let html = '';
-                    items.forEach(item => {
-                        html += `<div onclick="selectMkb('${item.diseaseId}','${item.mkbCode}','${item.name}')" style="padding:8px;cursor:pointer;border-bottom:1px solid #eee;">
-                                <strong>${item.mkbCode}</strong> — ${item.name}</div>`;
-                    });
+                    items.forEach(item => { html += `<div onclick="selectMkb('${item.diseaseId}','${item.mkbCode}','${item.name.replace(/'/g, "\\'")}')" style="padding:8px;cursor:pointer;border-bottom:1px solid #eee;"><strong>${item.mkbCode}</strong> — ${item.name}</div>`; });
                     document.getElementById('mkbResults').innerHTML = html || '<p style="color:#999;">Ничего не найдено</p>';
                 }
             } catch (e) { }
@@ -609,7 +561,20 @@
             document.getElementById('mkbResults').innerHTML = '';
         }
 
-        showApplications();
+        // Проверяем, нужно ли автоматически открыть форму записи
+        const autoEntry = sessionStorage.getItem('autoOpenEntry');
+        if (autoEntry) {
+            const data = JSON.parse(autoEntry);
+            sessionStorage.removeItem('autoOpenEntry');
+            // Ждём загрузки страницы и открываем форму
+            setTimeout(() => {
+                showAddEntry(data.patientId, data.applicationId, data.patientFullName);
+            }, 300);
+        }
+
+        if (!autoEntry) {
+            showApplications();
+        }
     </script>
 </body>
 </html>

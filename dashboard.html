@@ -347,22 +347,32 @@
                     } else {
                         data.courses.forEach(course => {
                             html += `<div style="background:#e8f5e9;border-radius:10px;padding:20px;margin-bottom:15px;border-left:5px solid ${course.status === 'active' ? '#28a745' : '#ff9800'};">
-                                    <h4>📋 Курс лечения <span style="color:${course.status === 'active' ? '#28a745' : '#ff9800'};font-size:14px;">(${course.status === 'active' ? 'Активен' : 'Завершён'})</span></h4>
-                                    <p><strong>👨‍⚕️ Врач:</strong> ${course.consultantFullName} (${course.specialty})</p>
-                                    <p><strong>📅 Начат:</strong> ${new Date(course.startDate).toLocaleDateString()}</p>
-                                    ${course.endDate ? `<p><strong>📅 Завершён:</strong> ${new Date(course.endDate).toLocaleDateString()}</p>` : ''}
-                                    ${course.causeOfEnd ? `<p><strong>📝 Причина завершения:</strong> ${course.causeOfEnd}</p>` : ''}
-                                    <p style="margin-top:10px;font-weight:500;">Записи:</p>`;
+                            <h4>📋 Курс лечения <span style="color:${course.status === 'active' ? '#28a745' : '#ff9800'};font-size:14px;">(${course.status === 'active' ? 'Активен' : 'Завершён'})</span></h4>
+                            <p><strong>👨‍⚕️ Врач:</strong> ${course.consultantFullName} (${course.specialty})</p>
+                            ${course.complaints ? `<p><strong>🩺 Жалобы:</strong> ${course.complaints}</p>` : ''}
+                            ${course.preliminaryDiagnosis ? `<p><strong>📝 Предв. диагноз:</strong> ${course.preliminaryDiagnosis}</p>` : ''}
+                            <p><strong>📅 Начат:</strong> ${new Date(course.startDate).toLocaleDateString()}</p>
+                            ${course.endDate ? `<p><strong>📅 Завершён:</strong> ${new Date(course.endDate).toLocaleDateString()}</p>` : ''}
+                            ${course.causeOfEnd ? `<p><strong>📝 Причина завершения:</strong> ${course.causeOfEnd}</p>` : ''}
+                            <p style="margin-top:10px;font-weight:500;">Записи:</p>`;
                             course.entries.forEach(entry => {
                                 html += `<div style="background:white;border-radius:8px;padding:12px;margin:8px 0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-                                        <p><strong>📅 ${new Date(entry.createdAt).toLocaleDateString()}</strong></p>
-                                        ${entry.disease ? `<p>🏥 МКБ-10: <strong>${entry.disease.mkbCode}</strong> — ${entry.disease.name}</p>` : ''}
-                                        ${entry.conclusion ? `<p>📝 ${entry.conclusion}</p>` : ''}
-                                        ${entry.medications && entry.medications.length > 0 ? `<p>💊 Медикаменты: ${entry.medications.map(m => `${m.name} (${m.dosage || '—'}, ${m.frequency || '—'})`).join('; ')}</p>` : ''}
-                                        ${entry.procedures && entry.procedures.length > 0 ? `<p>🏥 Процедуры: ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
-                                        ${entry.analyses && entry.analyses.length > 0 ? `<p>🔬 Анализы: ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
-                                        ${entry.recommendations ? `<p>📋 Рекомендации: ${entry.recommendations}</p>` : ''}
-                                    </div>`;
+                                <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;">
+                                    <p><strong>📅 ${new Date(entry.createdAt).toLocaleDateString()}</strong></p>
+                                    ${entry.consultationId ? `<button class="btn btn-view" onclick="window.open('consultation.html?id=${entry.consultationId}','_blank')" style="font-size:12px;padding:5px 10px;">💬 Консультация</button>` : ''}
+                                </div>
+                                ${entry.complaints ? `<p>🩺 <strong>Жалобы:</strong> ${entry.complaints}</p>` : ''}
+                                ${entry.previousDiagnoses ? `<p>📋 <strong>Ранее поставленные диагнозы:</strong> ${entry.previousDiagnoses}</p>` : ''}
+                                ${entry.currentMedications ? `<p>💊 <strong>Принимаемые медикаменты:</strong> ${entry.currentMedications}</p>` : ''}
+                                ${entry.disease ? `<p>🏥 МКБ-10: <strong>${entry.disease.mkbCode}</strong> — ${entry.disease.name}</p>` : ''}
+                                ${entry.conclusion ? `<p>📝 ${entry.conclusion}</p>` : ''}
+                                ${entry.medications && entry.medications.length > 0 ? `<p>💊 Медикаменты: ${entry.medications.map(m => `${m.name} (${m.dosage || '—'}, ${m.frequency || '—'})`).join('; ')}</p>` : ''}
+                                ${entry.procedures && entry.procedures.length > 0 ? `<p>🏥 Процедуры: ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
+                                ${entry.analyses && entry.analyses.length > 0 ? `<p>🔬 Анализы: ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
+                                ${entry.referrals && entry.referrals.length > 0 ? `<div style="margin-top:6px;"><strong>🔬 Направления на анализ:</strong> ${entry.referrals.map(r => `${r.organizationName ? '🏥 ' + r.organizationName + ': ' : ''}${r.tests}${r.referralPurpose ? ' (' + r.referralPurpose + ')' : ''}${r.serviceCode ? ' [код: ' + r.serviceCode + ']' : ''}`).join('<br>')}</div>` : ''}
+                                ${entry.recommendations ? `<p>📋 Рекомендации: ${entry.recommendations}</p>` : ''}
+                                ${entry.documents && entry.documents.length > 0 ? `<div style="margin-top:8px;"><strong>📎 Документы:</strong> ${entry.documents.map(d => `<a href="#" onclick="downloadDocFromMedbook('${d.documentId}','${d.fileName}');return false;" style="color:#11998e;margin-left:5px;">📄 ${d.fileName}</a>`).join('')}</div>` : ''}
+                            </div>`;
                             });
                             html += `</div>`;
                         });
@@ -370,6 +380,16 @@
                     document.getElementById('medBookContent').innerHTML = html;
                 }
             } catch (err) { document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
+        }
+
+        // Скачивание документа из медкарты
+        function downloadDocFromMedbook(docId, fileName) {
+            fetch(`${API_URL}/api/Documents/${docId}/download`, { headers: { 'Authorization': `Bearer ${token}` } })
+                .then(r => r.blob()).then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = fileName;
+                    document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+                }).catch(e => { });
         }
 
         // ===== СОЗДАНИЕ ЗАЯВКИ =====
