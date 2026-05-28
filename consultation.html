@@ -352,7 +352,7 @@
     </div>
 
     <script>
-        const API_URL = 'http://192.168.0.106:5095';
+        const API_URL = `https://${window.location.hostname}:5096`;
         const token = localStorage.getItem('token');
         const role = localStorage.getItem('role');
         const consultationId = new URLSearchParams(window.location.search).get('id');
