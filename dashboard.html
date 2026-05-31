@@ -87,6 +87,10 @@
             background: #11998e;
         }
 
+        .btn-reject {
+            background: #dc3545;
+        }
+
         .tabs {
             display: flex;
             gap: 10px;
@@ -163,17 +167,20 @@
 
         .info-row {
             display: flex;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
+            align-items: center;
         }
 
         .info-label {
-            width: 150px;
+            width: 220px;
             font-weight: 500;
-            color: #666;
+            color: #555;
+            flex-shrink: 0;
         }
 
         .info-value {
             color: #333;
+            flex: 1;
         }
 
         .welcome {
@@ -211,6 +218,13 @@
                 color: #666;
                 font-size: 13px;
             }
+
+        .patient-info-block {
+            background: #f0f4ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
@@ -233,6 +247,7 @@
         let userData = null;
         let signalRConnection;
         let incomingCallOffer = null;
+        let patientInfoCache = null;
 
         if (!token || role !== 'Patient') { window.location.href = 'login.html'; }
         function logout() { localStorage.clear(); window.location.href = 'login.html'; }
@@ -256,30 +271,30 @@
 
         function showMain(user) {
             document.getElementById('mainContent').innerHTML = `
-                    <div class="welcome">👋 Здравствуйте, ${user.name || user.email}!</div>
-                    <div class="card">
-                        <h3>📋 Личная информация</h3>
-                        <div class="info-row"><div class="info-label">Email:</div><div class="info-value">${user.email}</div></div>
-                        ${user.surname ? `<div class="info-row"><div class="info-label">ФИО:</div><div class="info-value">${user.surname} ${user.name} ${user.middleName || ''}</div></div>` : ''}
-                        ${user.dateOfBirth ? `<div class="info-row"><div class="info-label">Дата рождения:</div><div class="info-value">${new Date(user.dateOfBirth).toLocaleDateString()}</div></div>` : ''}
-                        ${user.contactInfo ? `<div class="info-row"><div class="info-label">Контакты:</div><div class="info-value">${user.contactInfo}</div></div>` : ''}
-                    </div>
-                    <div class="menu">
-                        <div class="menu-item" onclick="showCreateApplication()"><h4>📝 Создать заявку</h4><p>Выбрать врача и время консультации</p></div>
-                        <div class="menu-item" onclick="showMyApplications()"><h4>📋 Мои заявки</h4><p>История обращений и консультации</p></div>
-                        <div class="menu-item" onclick="showMedicalBook()"><h4>📄 Медицинская карта</h4><p>Записи, назначения, документы</p></div>
-                    </div>`;
+                        <div class="welcome">Здравствуйте, ${user.name || user.email}!</div>
+                        <div class="card">
+                            <h3>Личная информация</h3>
+                            <div class="info-row"><div class="info-label">Email:</div><div class="info-value">${user.email}</div></div>
+                            ${user.surname ? `<div class="info-row"><div class="info-label">ФИО:</div><div class="info-value">${user.surname} ${user.name} ${user.middleName || ''}</div></div>` : ''}
+                            ${user.dateOfBirth ? `<div class="info-row"><div class="info-label">Дата рождения:</div><div class="info-value">${new Date(user.dateOfBirth).toLocaleDateString()}</div></div>` : ''}
+                            ${user.contactInfo ? `<div class="info-row"><div class="info-label">Контакты:</div><div class="info-value">${user.contactInfo}</div></div>` : ''}
+                        </div>
+                        <div class="menu">
+                            <div class="menu-item" onclick="showCreateApplication()"><h4>📝 Создать заявку</h4><p>Выбрать врача и время консультации</p></div>
+                            <div class="menu-item" onclick="showMyApplications()"><h4>📋 Мои заявки</h4><p>История обращений и консультации</p></div>
+                            <div class="menu-item" onclick="showMedicalBook()"><h4>📄 Медицинская карта</h4><p>Записи, назначения, документы</p></div>
+                        </div>`;
         }
 
         // ===== МОИ ЗАЯВКИ =====
         async function showMyApplications() {
             document.getElementById('mainContent').innerHTML = `
-                    <div class="card"><h3>📋 Мои заявки</h3>
-                        <div class="tabs">
-                            <button class="tab-btn active" onclick="switchPatientTab('scheduled')">Назначенные</button>
-                            <button class="tab-btn" onclick="switchPatientTab('completed')">Завершённые</button>
-                        </div>
-                        <div id="appList">Загрузка...</div></div>`;
+                        <div class="card"><h3>📋 Мои заявки</h3>
+                            <div class="tabs">
+                                <button class="tab-btn active" onclick="switchPatientTab('scheduled')">Назначенные</button>
+                                <button class="tab-btn" onclick="switchPatientTab('completed')">Завершённые</button>
+                            </div>
+                            <div id="appList">Загрузка...</div></div>`;
             loadPatientApplications('scheduled');
         }
 
@@ -309,10 +324,10 @@
                         const st = tab === 'scheduled' ? 'Назначена' : 'Завершена';
                         const badge = tab === 'scheduled' ? 'badge-accepted' : 'badge-completed';
                         html += `<tr>
-                                <td>${app.complaints || 'Причина обращения не указана'}</td>
-                                <td>${app.consultationDate ? new Date(app.consultationDate).toLocaleString() : new Date(app.createdAt).toLocaleDateString()}</td>
-                                <td><span class="badge ${badge}">${st}</span></td>
-                                <td>${tab === 'scheduled' ?
+                                    <td>${app.complaints || 'Причина обращения не указана'}</td>
+                                    <td>${app.consultationDate ? new Date(app.consultationDate).toLocaleString() : new Date(app.createdAt).toLocaleDateString()}</td>
+                                    <td><span class="badge ${badge}">${st}</span></td>
+                                    <td>${tab === 'scheduled' ?
                                 `<button class="btn btn-view" onclick="openConsultation('${app.applicationId}')">💬 Консультация</button>` :
                                 `<button class="btn btn-view" onclick="showMedicalBook()">📄 Медкарта</button>`}</td></tr>`;
                     });
@@ -334,9 +349,30 @@
             } catch (e) { alert('Ошибка: ' + e.message); }
         }
 
-        // ===== МЕДКАРТА =====
+        // ===== МЕДКАРТА (ОБНОВЛЁННАЯ) =====
         async function showMedicalBook() {
-            document.getElementById('mainContent').innerHTML = `<div class="card"><h3>📄 Медицинская карта</h3><div id="medBookContent">Загрузка...</div></div>`;
+            document.getElementById('mainContent').innerHTML = `
+                    <div class="card">
+                        <h3>📄 Медицинская карта</h3>
+                        <div id="patientInfoBlock">Загрузка информации о пациенте...</div>
+                        <hr style="margin:20px 0;">
+                        <div id="medBookContent">Загрузка записей...</div>
+                    </div>`;
+
+            // Загружаем информацию о пациенте
+            try {
+                const infoResp = await fetch(`${API_URL}/api/MedicalBook/patient-info/my`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (infoResp.ok) {
+                    patientInfoCache = await infoResp.json();
+                    renderPatientInfo(patientInfoCache);
+                } else {
+                    document.getElementById('patientInfoBlock').innerHTML = '<p style="color:red;">Не удалось загрузить информацию о пациенте.</p>';
+                }
+            } catch (e) {
+                document.getElementById('patientInfoBlock').innerHTML = `<p style="color:red;">Ошибка загрузки информации: ${e.message}</p>`;
+            }
+
+            // Загружаем курсы и записи
             try {
                 const response = await fetch(`${API_URL}/api/MedicalBook/my`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
@@ -346,40 +382,206 @@
                         html += '<p>В вашей медкарте пока нет записей.</p>';
                     } else {
                         data.courses.forEach(course => {
-                            html += `<div style="background:#e8f5e9;border-radius:10px;padding:20px;margin-bottom:15px;border-left:5px solid ${course.status === 'active' ? '#28a745' : '#ff9800'};">
-                            <h4>📋 Курс лечения <span style="color:${course.status === 'active' ? '#28a745' : '#ff9800'};font-size:14px;">(${course.status === 'active' ? 'Активен' : 'Завершён'})</span></h4>
-                            <p><strong>👨‍⚕️ Врач:</strong> ${course.consultantFullName} (${course.specialty})</p>
-                            ${course.complaints ? `<p><strong>🩺 Жалобы:</strong> ${course.complaints}</p>` : ''}
-                            ${course.preliminaryDiagnosis ? `<p><strong>📝 Предв. диагноз:</strong> ${course.preliminaryDiagnosis}</p>` : ''}
-                            <p><strong>📅 Начат:</strong> ${new Date(course.startDate).toLocaleDateString()}</p>
-                            ${course.endDate ? `<p><strong>📅 Завершён:</strong> ${new Date(course.endDate).toLocaleDateString()}</p>` : ''}
-                            ${course.causeOfEnd ? `<p><strong>📝 Причина завершения:</strong> ${course.causeOfEnd}</p>` : ''}
-                            <p style="margin-top:10px;font-weight:500;">Записи:</p>`;
-                            course.entries.forEach(entry => {
-                                html += `<div style="background:white;border-radius:8px;padding:12px;margin:8px 0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-                                <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;">
-                                    <p><strong>📅 ${new Date(entry.createdAt).toLocaleDateString()}</strong></p>
-                                    ${entry.consultationId ? `<button class="btn btn-view" onclick="window.open('consultation.html?id=${entry.consultationId}','_blank')" style="font-size:12px;padding:5px 10px;">💬 Консультация</button>` : ''}
-                                </div>
-                                ${entry.complaints ? `<p>🩺 <strong>Жалобы:</strong> ${entry.complaints}</p>` : ''}
-                                ${entry.previousDiagnoses ? `<p>📋 <strong>Ранее поставленные диагнозы:</strong> ${entry.previousDiagnoses}</p>` : ''}
-                                ${entry.currentMedications ? `<p>💊 <strong>Принимаемые медикаменты:</strong> ${entry.currentMedications}</p>` : ''}
-                                ${entry.disease ? `<p>🏥 МКБ-10: <strong>${entry.disease.mkbCode}</strong> — ${entry.disease.name}</p>` : ''}
-                                ${entry.conclusion ? `<p>📝 ${entry.conclusion}</p>` : ''}
-                                ${entry.medications && entry.medications.length > 0 ? `<p>💊 Медикаменты: ${entry.medications.map(m => `${m.name} (${m.dosage || '—'}, ${m.frequency || '—'})`).join('; ')}</p>` : ''}
-                                ${entry.procedures && entry.procedures.length > 0 ? `<p>🏥 Процедуры: ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
-                                ${entry.analyses && entry.analyses.length > 0 ? `<p>🔬 Анализы: ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
-                                ${entry.referrals && entry.referrals.length > 0 ? `<div style="margin-top:6px;"><strong>🔬 Направления на анализ:</strong> ${entry.referrals.map(r => `${r.organizationName ? '🏥 ' + r.organizationName + ': ' : ''}${r.tests}${r.referralPurpose ? ' (' + r.referralPurpose + ')' : ''}${r.serviceCode ? ' [код: ' + r.serviceCode + ']' : ''}`).join('<br>')}</div>` : ''}
-                                ${entry.recommendations ? `<p>📋 Рекомендации: ${entry.recommendations}</p>` : ''}
-                                ${entry.documents && entry.documents.length > 0 ? `<div style="margin-top:8px;"><strong>📎 Документы:</strong> ${entry.documents.map(d => `<a href="#" onclick="downloadDocFromMedbook('${d.documentId}','${d.fileName}');return false;" style="color:#11998e;margin-left:5px;">📄 ${d.fileName}</a>`).join('')}</div>` : ''}
-                            </div>`;
-                            });
-                            html += `</div>`;
+                            html += renderCourseHtml(course);
                         });
                     }
                     document.getElementById('medBookContent').innerHTML = html;
+                } else {
+                    document.getElementById('medBookContent').innerHTML = '<p style="color:red;">Не удалось загрузить записи.</p>';
                 }
-            } catch (err) { document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
+            } catch (err) {
+                document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка загрузки записей: ${err.message}</p>`;
+            }
+        }
+
+        function renderPatientInfo(info) {
+            if (!info) {
+                document.getElementById('patientInfoBlock').innerHTML = '<p style="color:red;">Нет данных о пациенте.</p>';
+                return;
+            }
+
+            const genderDisplay = info.gender === 'Male' ? 'Мужской' : info.gender === 'Female' ? 'Женский' : info.gender || '—';
+            const birthDate = info.dateOfBirth ? new Date(info.dateOfBirth).toLocaleDateString() : '—';
+            const medBookDate = info.medicalBookCreatedAt && info.medicalBookCreatedAt !== '0001-01-01T00:00:00'
+                ? new Date(info.medicalBookCreatedAt).toLocaleDateString()
+                : '—';
+
+            const fields = [
+                { label: 'Дата создания медкарты', value: medBookDate, editable: false },
+                { label: 'ФИО', value: info.fullName || '—', editable: false },
+                { label: 'Пол', value: genderDisplay, editable: false },
+                { label: 'Дата рождения', value: birthDate, editable: false },
+                { label: 'Возраст', value: info.age ? `${info.age} лет` : '—', editable: false },
+                { label: 'Полис ОМС', value: info.omsPolicy || '—', editable: false },
+                { label: 'Семейное положение', value: info.maritalStatus || '—', key: 'maritalStatus', editable: true },
+                { label: 'Образование', value: info.education || '—', key: 'education', editable: true },
+                { label: 'Занятость', value: info.employment || '—', key: 'employment', editable: true },
+                { label: 'Инвалидность', value: info.disability || '—', key: 'disability', editable: true },
+                { label: 'Место работы, должность', value: info.workplace || '—', key: 'workplace', editable: true },
+                { label: 'Изменение места работы', value: info.workplaceChanged || '—', key: 'workplaceChanged', editable: true },
+                { label: 'Группа крови', value: info.bloodType || '—', key: 'bloodType', editable: true },
+                { label: 'Резус-фактор', value: info.rhFactor || '—', key: 'rhFactor', editable: true },
+                { label: 'Аллергические реакции', value: info.allergicReactions || '—', key: 'allergicReactions', editable: true }
+            ];
+
+            let html = `<div class="patient-info-block">`;
+            html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <strong style="font-size:16px;">👤 Информация о пациенте</strong>
+                    <button id="editPatientBtn" class="btn btn-primary" onclick="togglePatientEdit()" style="font-size:12px;">✏️ Редактировать</button>
+                </div>`;
+            html += `<div id="patientInfoGrid">`;
+
+            fields.forEach(f => {
+                html += `<div class="info-row">
+                        <div class="info-label">${f.label}:</div>
+                        <div class="info-value" data-key="${f.key || ''}" data-editable="${f.editable}">`;
+                if (f.editable) {
+                    html += `<span class="view-value">${f.value}</span>
+                                 <input type="text" class="edit-value" value="${f.value === '—' ? '' : f.value}"
+                                        style="display:none;width:100%;padding:5px;border:1px solid #ddd;border-radius:3px;"
+                                        data-key="${f.key}">`;
+                } else {
+                    html += f.value;
+                }
+                html += `</div></div>`;
+            });
+
+            html += `</div>`;
+            html += `<div id="editButtons" style="display:none;margin-top:12px;gap:10px;">
+                    <button class="btn btn-success" onclick="savePatientInfo()">💾 Сохранить</button>
+                    <button class="btn btn-reject" onclick="cancelPatientEdit()" style="background:#999;">Отмена</button>
+                </div>`;
+            html += `</div>`;
+
+            document.getElementById('patientInfoBlock').innerHTML = html;
+        }
+
+        function togglePatientEdit() {
+            const grid = document.getElementById('patientInfoGrid');
+            const editBtn = document.getElementById('editPatientBtn');
+            const editButtons = document.getElementById('editButtons');
+
+            if (!grid || !editBtn || !editButtons) return;
+
+            grid.querySelectorAll('.info-value[data-editable="true"]').forEach(div => {
+                const view = div.querySelector('.view-value');
+                const input = div.querySelector('.edit-value');
+                if (view && input) {
+                    view.style.display = 'none';
+                    input.style.display = 'block';
+                }
+            });
+            editBtn.style.display = 'none';
+            editButtons.style.display = 'flex';
+        }
+
+        function cancelPatientEdit() {
+            const grid = document.getElementById('patientInfoGrid');
+            const editBtn = document.getElementById('editPatientBtn');
+            const editButtons = document.getElementById('editButtons');
+
+            if (!grid || !editBtn || !editButtons) return;
+
+            grid.querySelectorAll('.info-value[data-editable="true"]').forEach(div => {
+                const view = div.querySelector('.view-value');
+                const input = div.querySelector('.edit-value');
+                if (view && input) {
+                    input.value = view.textContent === '—' ? '' : view.textContent;
+                    view.style.display = 'inline';
+                    input.style.display = 'none';
+                }
+            });
+            editBtn.style.display = 'inline-block';
+            editButtons.style.display = 'none';
+        }
+
+        async function savePatientInfo() {
+            const body = {};
+            const grid = document.getElementById('patientInfoGrid');
+            if (!grid) return;
+
+            grid.querySelectorAll('.edit-value').forEach(input => {
+                const key = input.getAttribute('data-key');
+                if (key) {
+                    body[key] = input.value || null;
+                }
+            });
+
+            try {
+                const resp = await fetch(`${API_URL}/api/MedicalBook/patient-info`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (resp.ok) {
+                    // Обновляем кэш и отображение
+                    if (patientInfoCache) {
+                        Object.keys(body).forEach(key => {
+                            patientInfoCache[key] = body[key];
+                        });
+                    }
+
+                    grid.querySelectorAll('.info-value[data-editable="true"]').forEach(div => {
+                        const view = div.querySelector('.view-value');
+                        const input = div.querySelector('.edit-value');
+                        if (view && input) {
+                            view.textContent = input.value || '—';
+                            view.style.display = 'inline';
+                            input.style.display = 'none';
+                        }
+                    });
+
+                    const editBtn = document.getElementById('editPatientBtn');
+                    const editButtons = document.getElementById('editButtons');
+                    if (editBtn) editBtn.style.display = 'inline-block';
+                    if (editButtons) editButtons.style.display = 'none';
+
+                    alert('✅ Данные сохранены!');
+                } else {
+                    const err = await resp.text();
+                    alert('❌ Ошибка сохранения: ' + err);
+                }
+            } catch (e) {
+                alert('❌ Ошибка: ' + e.message);
+            }
+        }
+
+        function renderCourseHtml(course) {
+            let html = `<div style="background:#e8f5e9;border-radius:10px;padding:20px;margin-bottom:15px;border-left:5px solid ${course.status === 'active' ? '#28a745' : '#ff9800'};">
+                    <h4>Курс лечения <span style="color:${course.status === 'active' ? '#28a745' : '#ff9800'};font-size:14px;">(${course.status === 'active' ? 'Активен' : 'Завершён'})</span></h4>
+                    <p><strong>Врач:</strong> ${course.consultantFullName || '—'} ${course.specialty ? '(' + course.specialty + ')' : ''}</p>
+                    ${course.complaints ? `<p><strong>🩺 Жалобы:</strong> ${course.complaints}</p>` : ''}
+                    ${course.preliminaryDiagnosis ? `<p><strong>Предв. диагноз:</strong> ${course.preliminaryDiagnosis}</p>` : ''}
+                    <p><strong>Начат:</strong> ${course.startDate ? new Date(course.startDate).toLocaleDateString() : '—'}</p>
+                    ${course.endDate ? `<p><strong>Завершён:</strong> ${new Date(course.endDate).toLocaleDateString()}</p>` : ''}
+                    ${course.causeOfEnd ? `<p><strong>Причина завершения:</strong> ${course.causeOfEnd}</p>` : ''}
+                    <p style="margin-top:10px;font-weight:500;">Записи:</p>`;
+
+            if (course.entries && course.entries.length > 0) {
+                course.entries.forEach(entry => {
+                    html += `<div style="background:white;border-radius:8px;padding:12px;margin:8px 0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+                            <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;">
+                                <p><strong>${entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : '—'}</strong></p>
+                                ${entry.consultationId ? `<button class="btn btn-view" onclick="window.open('consultation.html?id=${entry.consultationId}','_blank')" style="font-size:12px;padding:5px 10px;">💬 Консультация</button>` : ''}
+                            </div>
+                            ${entry.complaints ? `<p><strong>Жалобы:</strong> ${entry.complaints}</p>` : ''}
+                            ${entry.previousDiagnoses ? `<p><strong>Ранее поставленные диагнозы:</strong> ${entry.previousDiagnoses}</p>` : ''}
+                            ${entry.currentMedications ? `<p><strong>Принимаемые медикаменты:</strong> ${entry.currentMedications}</p>` : ''}
+                            ${entry.disease ? `<p>МКБ-10: <strong>${entry.disease.mkbCode}</strong> — ${entry.disease.name}</p>` : ''}
+                            ${entry.conclusion ? `<p>${entry.conclusion}</p>` : ''}
+                            ${entry.medications && entry.medications.length > 0 ? `<p>Медикаменты: ${entry.medications.map(m => `${m.name} (${m.dosage || '—'}, ${m.frequency || '—'})`).join('; ')}</p>` : ''}
+                            ${entry.procedures && entry.procedures.length > 0 ? `<p>Процедуры: ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
+                            ${entry.analyses && entry.analyses.length > 0 ? `<p>Анализы: ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
+                            ${entry.referrals && entry.referrals.length > 0 ? `<div style="margin-top:6px;"><strong>Направления на анализ:</strong> ${entry.referrals.map(r => `${r.organizationName ? + r.organizationName + ': ' : ''}${r.tests}${r.referralPurpose ? ' (' + r.referralPurpose + ')' : ''}${r.serviceCode ? ' [код: ' + r.serviceCode + ']' : ''}`).join('<br>')}</div>` : ''}
+                            ${entry.recommendations ? `<p>Рекомендации: ${entry.recommendations}</p>` : ''}
+                            ${entry.documents && entry.documents.length > 0 ? `<div style="margin-top:8px;"><strong>Документы:</strong> ${entry.documents.map(d => `<a href="#" onclick="downloadDocFromMedbook('${d.documentId}','${d.fileName.replace(/'/g, "\\'")}');return false;" style="color:#11998e;margin-left:5px;">📄 ${d.fileName}</a>`).join('')}</div>` : ''}
+                        </div>`;
+                });
+            }
+
+            html += `</div>`;
+            return html;
         }
 
         // Скачивание документа из медкарты
@@ -395,17 +597,17 @@
         // ===== СОЗДАНИЕ ЗАЯВКИ =====
         function showCreateApplication() {
             document.getElementById('mainContent').innerHTML = `
-                    <div class="card"><h3>📝 Новая заявка на консультацию</h3><p style="color:#666;margin-bottom:20px;">Выберите способ поиска консультанта:</p><div id="stepContainer"></div></div>`;
+                        <div class="card"><h3>📝 Новая заявка на консультацию</h3><p style="color:#666;margin-bottom:20px;">Выберите способ поиска консультанта:</p><div id="stepContainer"></div></div>`;
             showStep1();
         }
 
         function showStep1() {
             document.getElementById('stepContainer').innerHTML = `
-                    <div class="menu">
-                        <div class="menu-item" onclick="showCommonReasons()"><h4>📋 Частые причины</h4><p>Выбрать из списка популярных обращений</p></div>
-                        <div class="menu-item" onclick="showSpecializations()"><h4>🏥 Специальности врачей</h4><p>Выбрать специалиста по направлению</p></div>
-                    </div>
-                    <button onclick="showPage('main')" style="margin-top:20px;background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">← Назад</button>`;
+                        <div class="menu">
+                            <div class="menu-item" onclick="showCommonReasons()"><h4>📋 Частые причины</h4><p>Выбрать из списка популярных обращений</p></div>
+                            <div class="menu-item" onclick="showSpecializations()"><h4>🏥 Специальности врачей</h4><p>Выбрать специалиста по направлению</p></div>
+                        </div>
+                        <button onclick="showPage('main')" style="margin-top:20px;background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">← Назад</button>`;
         }
 
         async function showCommonReasons() {
@@ -420,7 +622,7 @@
             let html = `<h4 style="margin-bottom:15px;">Выберите причину обращения:</h4>`;
             reasons.forEach(r => {
                 html += `<div class="menu-item" onclick="selectedReason='${r.subject}';selectedSpecialty='${r.specialty}';showConsultantsBySpecialty('${r.specialty}')" style="margin-bottom:10px;text-align:left;padding:15px;">
-                        <strong>${r.subject}</strong><span style="color:#999;font-size:12px;display:block;">Специальность: ${r.specialty}</span></div>`;
+                            <strong>${r.subject}</strong><span style="color:#999;font-size:12px;display:block;">Специальность: ${r.specialty}</span></div>`;
             });
             html += `<button onclick="showStep1()" style="margin-top:15px;background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">← Назад</button>`;
             document.getElementById('stepContainer').innerHTML = html;
@@ -457,7 +659,7 @@
                     let html = `<h4 style="margin-bottom:15px;">Консультанты (${specialty}):</h4>`;
                     consultants.forEach(c => {
                         html += `<div class="menu-item" onclick="showSlots('${c.consultantId}','${c.fullName}','${c.specialty}')" style="margin-bottom:10px;text-align:left;padding:15px;">
-                                <strong>👨‍⚕️ ${c.fullName}</strong><span style="color:#999;font-size:12px;display:block;">${c.post || ''} • Стаж: ${c.seniority || '—'} лет</span></div>`;
+                                    <strong>👨‍⚕️ ${c.fullName}</strong><span style="color:#999;font-size:12px;display:block;">${c.post || ''} • Стаж: ${c.seniority || '—'} лет</span></div>`;
                     });
                     html += `<button onclick="showStep1()" style="margin-top:15px;background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">← Назад</button>`;
                     document.getElementById('stepContainer').innerHTML = html;
@@ -469,10 +671,10 @@
             selectedConsultantId = consultantId; selectedConsultantName = consultantName; selectedSpecialty = specialty;
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('stepContainer').innerHTML = `
-                    <h4 style="margin-bottom:15px;">👨‍⚕️ ${consultantName} (${specialty})</h4>
-                    <div style="margin-bottom:15px;"><label>Выберите дату:</label><input type="date" id="slotDate" min="${today}" value="${today}" onchange="loadSlots('${consultantId}')"></div>
-                    <div id="slotsContainer"><p>Загрузка слотов...</p></div>
-                    <button onclick="showStep1()" style="margin-top:15px;background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">← Назад</button>`;
+                        <h4 style="margin-bottom:15px;">👨‍⚕️ ${consultantName} (${specialty})</h4>
+                        <div style="margin-bottom:15px;"><label>Выберите дату:</label><input type="date" id="slotDate" min="${today}" value="${today}" onchange="loadSlots('${consultantId}')"></div>
+                        <div id="slotsContainer"><p>Загрузка слотов...</p></div>
+                        <button onclick="showStep1()" style="margin-top:15px;background:#999;color:white;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;">← Назад</button>`;
             loadSlots(consultantId);
         }
 
@@ -498,20 +700,20 @@
         function showConfirm(time) {
             const date = document.getElementById('slotDate').value;
             document.getElementById('stepContainer').innerHTML = `
-                    <h4>✅ Подтверждение заявки</h4>
-                    <div style="background:#f0f4ff;padding:15px;border-radius:8px;margin-bottom:15px;">
-                        <p><strong>Консультант:</strong> ${selectedConsultantName}</p><p><strong>Специальность:</strong> ${selectedSpecialty}</p>
-                        <p><strong>Дата:</strong> ${new Date(date).toLocaleDateString()}</p><p><strong>Время:</strong> ${time}</p>
-                        ${selectedReason ? `<p><strong>Причина:</strong> ${selectedReason}</p>` : ''}
-                    </div>
-                    <div style="margin-bottom:15px;"><label>Жалобы:</label><textarea id="appComplaints" maxlength="500" rows="2" placeholder="Что вас беспокоит?"></textarea></div>
-                    <div style="margin-bottom:15px;"><label>Ранее поставленные диагнозы:</label><textarea id="appPrevDiagnoses" maxlength="500" rows="2" placeholder="Если есть — какие диагнозы вам ставили ранее?"></textarea></div>
-                    <div style="margin-bottom:15px;"><label>Принимаемые медикаменты:</label><textarea id="appCurrentMeds" maxlength="500" rows="2" placeholder="Какие лекарства принимаете сейчас?"></textarea></div>
-                    <div style="display:flex;gap:10px;">
-                        <button onclick="submitApplication('${date}T${time}:00')" class="btn btn-success">✅ Отправить</button>
-                        <button onclick="showSlots('${selectedConsultantId}','${selectedConsultantName}','${selectedSpecialty}')" class="btn" style="background:#999;">← Назад</button>
-                    </div>
-                    <div id="appResult" style="margin-top:15px;"></div>`;
+                        <h4>✅ Подтверждение заявки</h4>
+                        <div style="background:#f0f4ff;padding:15px;border-radius:8px;margin-bottom:15px;">
+                            <p><strong>Консультант:</strong> ${selectedConsultantName}</p><p><strong>Специальность:</strong> ${selectedSpecialty}</p>
+                            <p><strong>Дата:</strong> ${new Date(date).toLocaleDateString()}</p><p><strong>Время:</strong> ${time}</p>
+                            ${selectedReason ? `<p><strong>Причина:</strong> ${selectedReason}</p>` : ''}
+                        </div>
+                        <div style="margin-bottom:15px;"><label>Жалобы:</label><textarea id="appComplaints" maxlength="500" rows="2" placeholder="Что вас беспокоит?"></textarea></div>
+                        <div style="margin-bottom:15px;"><label>Ранее поставленные диагнозы:</label><textarea id="appPrevDiagnoses" maxlength="500" rows="2" placeholder="Если есть — какие диагнозы вам ставили ранее?"></textarea></div>
+                        <div style="margin-bottom:15px;"><label>Принимаемые медикаменты:</label><textarea id="appCurrentMeds" maxlength="500" rows="2" placeholder="Какие лекарства принимаете сейчас?"></textarea></div>
+                        <div style="display:flex;gap:10px;">
+                            <button onclick="submitApplication('${date}T${time}:00')" class="btn btn-success">✅ Отправить</button>
+                            <button onclick="showSlots('${selectedConsultantId}','${selectedConsultantName}','${selectedSpecialty}')" class="btn" style="background:#999;">← Назад</button>
+                        </div>
+                        <div id="appResult" style="margin-top:15px;"></div>`;
         }
 
         async function submitApplication(dateTime) {
@@ -554,18 +756,21 @@
         }
 
         function showIncomingCallModal() {
+            const existing = document.getElementById('incomingCallModal');
+            if (existing) existing.remove();
+
             const modal = document.createElement('div');
             modal.id = 'incomingCallModal';
             modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;justify-content:center;align-items:center;z-index:9999;';
             modal.innerHTML = `
-                    <div style="background:white;border-radius:15px;padding:30px;text-align:center;max-width:400px;">
-                        <h3 style="margin-bottom:15px;">📞 Входящий звонок</h3>
-                        <p style="margin-bottom:20px;color:#555;">Звонит: ${sessionStorage.getItem('incomingCallerName') || 'Консультант'}</p>
-                        <div style="display:flex;gap:15px;justify-content:center;">
-                            <button onclick="acceptIncomingCall()" style="background:#28a745;color:white;border:none;padding:15px 30px;border-radius:30px;font-size:16px;cursor:pointer;">✅ Принять</button>
-                            <button onclick="rejectIncomingCall()" style="background:#dc3545;color:white;border:none;padding:15px 30px;border-radius:30px;font-size:16px;cursor:pointer;">❌ Отклонить</button>
-                        </div>
-                    </div>`;
+                        <div style="background:white;border-radius:15px;padding:30px;text-align:center;max-width:400px;">
+                            <h3 style="margin-bottom:15px;">📞 Входящий звонок</h3>
+                            <p style="margin-bottom:20px;color:#555;">Звонит: ${sessionStorage.getItem('incomingCallerName') || 'Консультант'}</p>
+                            <div style="display:flex;gap:15px;justify-content:center;">
+                                <button onclick="acceptIncomingCall()" style="background:#28a745;color:white;border:none;padding:15px 30px;border-radius:30px;font-size:16px;cursor:pointer;">✅ Принять</button>
+                                <button onclick="rejectIncomingCall()" style="background:#dc3545;color:white;border:none;padding:15px 30px;border-radius:30px;font-size:16px;cursor:pointer;">❌ Отклонить</button>
+                            </div>
+                        </div>`;
             document.body.appendChild(modal);
         }
 

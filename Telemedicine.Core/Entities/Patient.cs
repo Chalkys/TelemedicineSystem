@@ -36,6 +36,34 @@ namespace Telemedicine.Core.Entities
         [Column("insurancepolicynumber")]
         public string InsurancePolicyNumber { get; set; }
 
+        // === НОВЫЕ ПОЛЯ ===
+        [Column("maritalstatus")]
+        public string? MaritalStatus { get; set; }
+
+        [Column("education")]
+        public string? Education { get; set; }
+
+        [Column("employment")]
+        public string? Employment { get; set; }
+
+        [Column("disability")]
+        public string? Disability { get; set; }
+
+        [Column("workplace")]
+        public string? Workplace { get; set; }
+
+        [Column("workplacechanged")]
+        public string? WorkplaceChanged { get; set; }
+
+        [Column("bloodtype")]
+        public string? BloodType { get; set; }
+
+        [Column("rhfactor")]
+        public string? RhFactor { get; set; }
+
+        [Column("allergicreactions")]
+        public string? AllergicReactions { get; set; }
+
         public virtual User User { get; set; }
     }
 }

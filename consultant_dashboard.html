@@ -155,6 +155,24 @@
             background: #e2e3e5;
             color: #383d41;
         }
+
+        .info-row {
+            display: flex;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+
+        .info-label {
+            width: 220px;
+            font-weight: 500;
+            color: #555;
+            flex-shrink: 0;
+        }
+
+        .info-value {
+            color: #333;
+            flex: 1;
+        }
     </style>
 </head>
 <body>
@@ -279,8 +297,29 @@
 
         // ===== МЕДКАРТА ПАЦИЕНТА =====
         async function showPatientMedicalBook(patientId, fullName) {
-            document.getElementById('mainContent').innerHTML = `<div class="card"><h3>Медкарта: ${fullName}</h3><div id="medBookContent">Загрузка...</div>
-                    <button onclick="showPatients()" style="margin-top:15px;" class="btn btn-view">← Назад</button></div>`;
+            document.getElementById('mainContent').innerHTML = `
+        <div class="card">
+            <h3>📄 Медкарта: ${fullName}</h3>
+            <div id="patientInfoBlock">Загрузка информации о пациенте...</div>
+            <hr style="margin:20px 0;">
+            <div id="medBookContent">Загрузка записей...</div>
+            <button onclick="showPatients()" style="margin-top:15px;" class="btn btn-view">← Назад</button>
+        </div>`;
+
+            // Загружаем информацию о пациенте
+            try {
+                const infoResp = await fetch(`${API_URL}/api/MedicalBook/patient-info/${patientId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if (infoResp.ok) {
+                    const info = await infoResp.json();
+                    renderPatientInfoConsultant(info);
+                } else {
+                    document.getElementById('patientInfoBlock').innerHTML = '<p style="color:red;">Не удалось загрузить информацию о пациенте.</p>';
+                }
+            } catch (e) {
+                document.getElementById('patientInfoBlock').innerHTML = `<p style="color:red;">Ошибка: ${e.message}</p>`;
+            }
+
+            // Загружаем курсы и записи
             try {
                 const response = await fetch(`${API_URL}/api/MedicalBook/patient/${patientId}`, { headers: { 'Authorization': `Bearer ${token}` } });
                 if (response.ok) {
@@ -290,42 +329,99 @@
                         html += '<p>Записей пока нет.</p>';
                     } else {
                         data.courses.forEach(course => {
-                            html += `<div style="background:#e8f5e9;border-radius:8px;padding:15px;margin-bottom:15px;border-left:4px solid #28a745;">
-                                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-                                        <p><strong>Курс лечения</strong> (${course.status === 'active' ? 'Активен' : 'Завершён'})</p>
-                                        ${course.status === 'active' ? `<button class="btn btn-reject" onclick="showCompleteCourse('${course.treatmentCourseId}','${patientId}','${fullName.replace(/'/g, "\\'")}')" style="font-size:12px;padding:5px 12px;">Завершить курс</button>` : ''}
-                                    </div>
-                                    <p><strong>Врач:</strong> ${course.consultantFullName}</p>
-                                    ${course.complaints ? `<p><strong>Жалобы:</strong> ${course.complaints}</p>` : ''}
-                                    ${course.preliminaryDiagnosis ? `<p><strong>Предв. диагноз:</strong> ${course.preliminaryDiagnosis}</p>` : ''}
-                                    <p><strong>Начат:</strong> ${new Date(course.startDate).toLocaleDateString()}</p>
-                                    ${course.endDate ? `<p><strong>Завершён:</strong> ${new Date(course.endDate).toLocaleDateString()}</p>` : ''}
-                                    ${course.causeOfEnd ? `<p><strong>Причина завершения:</strong> ${course.causeOfEnd}</p>` : ''}
-                                    <p style="margin-top:10px;"><strong>Записи:</strong></p>`;
-                            course.entries.forEach(entry => {
-                                html += `<div style="background:white;border-radius:5px;padding:10px;margin:5px 0;">
-                                        <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;">
-                                            <p><strong>${new Date(entry.createdAt).toLocaleDateString()}</strong></p>
-                                            ${entry.consultationId ? `<button class="btn btn-view" onclick="window.open('consultation.html?id=${entry.consultationId}','_blank')" style="font-size:12px;padding:5px 10px;">💬 Консультация</button>` : ''}
-                                        </div>
-                                        ${entry.complaints ? `<p><strong>Жалобы:</strong> ${entry.complaints}</p>` : ''}
-                                        ${entry.previousDiagnoses ? `<p><strong>Ранее поставленные диагнозы:</strong> ${entry.previousDiagnoses}</p>` : ''}
-                                        ${entry.disease ? `<p>МКБ-10: ${entry.disease.mkbCode} — ${entry.disease.name}</p>` : ''}
-                                        ${entry.conclusion ? `<p><strong>Предварительный диагноз:</strong> ${entry.conclusion}</p>` : ''}
-                                        ${entry.medications && entry.medications.length > 0 ? `<p><strong>Принимаемые медикаменты:</strong> ${entry.medications.map(m => `${m.name} (${m.dosage || ''}, ${m.frequency || ''})`).join(', ')}</p>` : ''}
-                                        ${entry.procedures && entry.procedures.length > 0 ? `<p><strong>Процедуры:</strong> ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
-                                        ${entry.analyses && entry.analyses.length > 0 ? `<p>Анализы: ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
-                                        ${entry.referrals && entry.referrals.length > 0 ? `<div style="margin-top:6px;"><strong>Направления на анализ:</strong> ${entry.referrals.map(r => `${r.organizationName ? '🏥 ' + r.organizationName + ': ' : ''}${r.tests}${r.referralPurpose ? ' (' + r.referralPurpose + ')' : ''}${r.serviceCode ? ' [код: ' + r.serviceCode + ']' : ''}`).join('<br>')}</div>` : ''}
-                                        ${entry.recommendations ? `<p>Рекомендации: ${entry.recommendations}</p>` : ''}
-                                        ${entry.documents && entry.documents.length > 0 ? `<div style="margin-top:8px;"><strong>Документы:</strong> ${entry.documents.map(d => `<a href="#" onclick="downloadDocFromMedbook('${d.documentId}','${d.fileName.replace(/'/g, "\\'")}');return false;" style="color:#11998e;margin-left:5px;">📄 ${d.fileName}</a>`).join('')}</div>` : ''}
-                                    </div>`;
-                            });
-                            html += `</div>`;
+                            html += renderCourseConsultantHtml(course, patientId, fullName);
                         });
                     }
                     document.getElementById('medBookContent').innerHTML = html;
+                } else {
+                    document.getElementById('medBookContent').innerHTML = '<p style="color:red;">Не удалось загрузить записи.</p>';
                 }
-            } catch (err) { document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`; }
+            } catch (err) {
+                document.getElementById('medBookContent').innerHTML = `<p style="color:red;">Ошибка: ${err.message}</p>`;
+            }
+        }
+
+        function renderPatientInfoConsultant(info) {
+            if (!info) {
+                document.getElementById('patientInfoBlock').innerHTML = '<p style="color:red;">Нет данных о пациенте.</p>';
+                return;
+            }
+
+            const genderDisplay = info.gender === 'Male' ? 'Мужской' : info.gender === 'Female' ? 'Женский' : info.gender || '—';
+            const birthDate = info.dateOfBirth ? new Date(info.dateOfBirth).toLocaleDateString() : '—';
+            const medBookDate = info.medicalBookCreatedAt && info.medicalBookCreatedAt !== '0001-01-01T00:00:00'
+                ? new Date(info.medicalBookCreatedAt).toLocaleDateString()
+                : '—';
+
+            const fields = [
+                { label: 'Дата создания медкарты', value: medBookDate },
+                { label: 'ФИО', value: info.fullName || '—' },
+                { label: 'Пол', value: genderDisplay },
+                { label: 'Дата рождения', value: birthDate },
+                { label: 'Возраст', value: info.age ? `${info.age} лет` : '—' },
+                { label: 'Полис ОМС', value: info.omsPolicy || '—' },
+                { label: 'Семейное положение', value: info.maritalStatus || '—' },
+                { label: 'Образование', value: info.education || '—' },
+                { label: 'Занятость', value: info.employment || '—' },
+                { label: 'Инвалидность', value: info.disability || '—' },
+                { label: 'Место работы, должность', value: info.workplace || '—' },
+                { label: 'Прошлые места работы', value: info.workplaceChanged || '—' },
+                { label: 'Группа крови', value: info.bloodType || '—' },
+                { label: 'Резус-фактор', value: info.rhFactor || '—' },
+                { label: 'Аллергические реакции', value: info.allergicReactions || '—' }
+            ];
+
+            let html = `<div style="background:#f0f4ff;border-radius:8px;padding:15px;">
+        <strong style="font-size:16px;display:block;margin-bottom:12px;">👤 Информация о пациенте</strong>`;
+
+            fields.forEach(f => {
+                html += `<div class="info-row">
+            <div class="info-label">${f.label}:</div>
+            <div class="info-value">${f.value}</div>
+        </div>`;
+            });
+
+            html += `</div>`;
+            document.getElementById('patientInfoBlock').innerHTML = html;
+        }
+
+        function renderCourseConsultantHtml(course, patientId, patientFullName) {
+            let html = `<div style="background:#e8f5e9;border-radius:8px;padding:15px;margin-bottom:15px;border-left:4px solid #28a745;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+            <p><strong>Курс лечения</strong> (${course.status === 'active' ? 'Активен' : 'Завершён'})</p>
+            ${course.status === 'active' ? `<button class="btn btn-reject" onclick="showCompleteCourse('${course.treatmentCourseId}','${patientId}','${patientFullName.replace(/'/g, "\\'")}')" style="font-size:12px;padding:5px 12px;">Завершить курс</button>` : ''}
+        </div>
+        <p><strong>Врач:</strong> ${course.consultantFullName || '—'}</p>
+        ${course.complaints ? `<p><strong>🩺 Жалобы:</strong> ${course.complaints}</p>` : ''}
+        ${course.preliminaryDiagnosis ? `<p><strong>Предв. диагноз:</strong> ${course.preliminaryDiagnosis}</p>` : ''}
+        <p><strong>Начат:</strong> ${course.startDate ? new Date(course.startDate).toLocaleDateString() : '—'}</p>
+        ${course.endDate ? `<p><strong>Завершён:</strong> ${new Date(course.endDate).toLocaleDateString()}</p>` : ''}
+        ${course.causeOfEnd ? `<p><strong>Причина завершения:</strong> ${course.causeOfEnd}</p>` : ''}
+        <p style="margin-top:10px;"><strong>Записи:</strong></p>`;
+
+            if (course.entries && course.entries.length > 0) {
+                course.entries.forEach(entry => {
+                    html += `<div style="background:white;border-radius:5px;padding:10px;margin:5px 0;">
+                <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;">
+                    <p><strong>${entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : '—'}</strong></p>
+                    ${entry.consultationId ? `<button class="btn btn-view" onclick="window.open('consultation.html?id=${entry.consultationId}','_blank')" style="font-size:12px;padding:5px 10px;">💬 Консультация</button>` : ''}
+                </div>
+                ${entry.complaints ? `<p><strong>Жалобы:</strong> ${entry.complaints}</p>` : ''}
+                ${entry.previousDiagnoses ? `<p><strong>Ранее поставленные диагнозы:</strong> ${entry.previousDiagnoses}</p>` : ''}
+                ${entry.disease ? `<p>МКБ-10: ${entry.disease.mkbCode} — ${entry.disease.name}</p>` : ''}
+                ${entry.conclusion ? `<p><strong>Предварительный диагноз</strong> ${entry.conclusion}</p>` : ''}
+                ${entry.medications && entry.medications.length > 0 ? `<p><strong>Принимаемые медикаменты:</strong> ${entry.medications.map(m => `${m.name} (${m.dosage || ''}, ${m.frequency || ''})`).join(', ')}</p>` : ''}
+                ${entry.procedures && entry.procedures.length > 0 ? `<p><strong>Процедуры:</strong> ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
+                ${entry.analyses && entry.analyses.length > 0 ? `<p>Анализы: ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
+                ${entry.referrals && entry.referrals.length > 0 ? `<div style="margin-top:6px;"><strong>Направления на анализ:</strong> ${entry.referrals.map(r => `${r.organizationName ? '' + r.organizationName + ': ' : ''}${r.tests}${r.referralPurpose ? ' (' + r.referralPurpose + ')' : ''}${r.serviceCode ? ' [код: ' + r.serviceCode + ']' : ''}`).join('<br>')}</div>` : ''}
+                ${entry.recommendations ? `<p>Рекомендации: ${entry.recommendations}</p>` : ''}
+                ${entry.documents && entry.documents.length > 0 ? `<div style="margin-top:8px;"><strong>Документы:</strong> ${entry.documents.map(d => `<a href="#" onclick="downloadDocFromMedbook('${d.documentId}','${d.fileName.replace(/'/g, "\\'")}');return false;" style="color:#11998e;margin-left:5px;">📄 ${d.fileName}</a>`).join('')}</div>` : ''}
+            </div>`;
+                });
+            }
+
+            html += `</div>`;
+            return html;
         }
 
         function downloadDocFromMedbook(docId, fileName) {

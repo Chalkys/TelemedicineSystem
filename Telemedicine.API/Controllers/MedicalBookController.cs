@@ -608,6 +608,120 @@ namespace TelemedicineSystem.API.Controllers
 
             return Ok(new { message = "Направление создано", referralId = referral.ReferralId });
         }
+
+        // 8. Получить информацию о пациенте (для пациента)
+        [HttpGet("patient-info/my")]
+        [Authorize(Roles = "Patient")]
+        public async Task<IActionResult> GetMyPatientInfo()
+        {
+            var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+
+            var patient = await _context.Patients
+                .FirstOrDefaultAsync(p => p.UserId == userId);
+
+            if (patient == null)
+                return NotFound("Пациент не найден");
+
+            var medicalBook = await _context.MedicalBooks
+                .FirstOrDefaultAsync(mb => mb.PatientId == patient.PatientId);
+
+            var dto = new PatientInfoDto
+            {
+                PatientId = patient.PatientId,
+                Surname = patient.Surname,
+                Name = patient.Name,
+                MiddleName = patient.MiddleName,
+                FullName = $"{patient.Surname} {patient.Name} {patient.MiddleName}".Trim(),
+                DateOfBirth = patient.DateOfBirth,
+                Age = DateTime.Now.Year - patient.DateOfBirth.Year -
+                      (DateTime.Now.DayOfYear < patient.DateOfBirth.DayOfYear ? 1 : 0),
+                Gender = patient.Gender,
+                ContactInfo = patient.ContactInfo,
+                OmsPolicy = patient.InsurancePolicyNumber,
+                MedicalBookCreatedAt = medicalBook?.CreationDate ?? DateTime.MinValue,
+                MaritalStatus = patient.MaritalStatus,
+                Education = patient.Education,
+                Employment = patient.Employment,
+                Disability = patient.Disability,
+                Workplace = patient.Workplace,
+                WorkplaceChanged = patient.WorkplaceChanged,
+                BloodType = patient.BloodType,
+                RhFactor = patient.RhFactor,
+                AllergicReactions = patient.AllergicReactions
+            };
+
+            return Ok(dto);
+        }
+
+        // 9. Получить информацию о пациенте (для консультанта)
+        [HttpGet("patient-info/{patientId}")]
+        [Authorize(Roles = "Consultant")]
+        public async Task<IActionResult> GetPatientInfo(Guid patientId)
+        {
+            var patient = await _context.Patients
+                .FirstOrDefaultAsync(p => p.PatientId == patientId);
+
+            if (patient == null)
+                return NotFound("Пациент не найден");
+
+            var medicalBook = await _context.MedicalBooks
+                .FirstOrDefaultAsync(mb => mb.PatientId == patientId);
+
+            var dto = new PatientInfoDto
+            {
+                PatientId = patient.PatientId,
+                Surname = patient.Surname,
+                Name = patient.Name,
+                MiddleName = patient.MiddleName,
+                FullName = $"{patient.Surname} {patient.Name} {patient.MiddleName}".Trim(),
+                DateOfBirth = patient.DateOfBirth,
+                Age = DateTime.Now.Year - patient.DateOfBirth.Year -
+                      (DateTime.Now.DayOfYear < patient.DateOfBirth.DayOfYear ? 1 : 0),
+                Gender = patient.Gender,
+                ContactInfo = patient.ContactInfo,
+                OmsPolicy = patient.InsurancePolicyNumber,
+                MedicalBookCreatedAt = medicalBook?.CreationDate ?? DateTime.MinValue,
+                MaritalStatus = patient.MaritalStatus,
+                Education = patient.Education,
+                Employment = patient.Employment,
+                Disability = patient.Disability,
+                Workplace = patient.Workplace,
+                WorkplaceChanged = patient.WorkplaceChanged,
+                BloodType = patient.BloodType,
+                RhFactor = patient.RhFactor,
+                AllergicReactions = patient.AllergicReactions
+            };
+
+            return Ok(dto);
+        }
+
+        // 10. Обновление данных пациентом
+        [HttpPut("patient-info")]
+        [Authorize(Roles = "Patient")]
+        public async Task<IActionResult> UpdatePatientInfo([FromBody] UpdatePatientInfoDto dto)
+        {
+            var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier).Value);
+
+            var patient = await _context.Patients
+                .FirstOrDefaultAsync(p => p.UserId == userId);
+
+            if (patient == null)
+                return NotFound("Пациент не найден");
+
+            if (dto.ContactInfo != null) patient.ContactInfo = dto.ContactInfo;
+            if (dto.MaritalStatus != null) patient.MaritalStatus = dto.MaritalStatus;
+            if (dto.Education != null) patient.Education = dto.Education;
+            if (dto.Employment != null) patient.Employment = dto.Employment;
+            if (dto.Disability != null) patient.Disability = dto.Disability;
+            if (dto.Workplace != null) patient.Workplace = dto.Workplace;
+            if (dto.WorkplaceChanged != null) patient.WorkplaceChanged = dto.WorkplaceChanged;
+            if (dto.BloodType != null) patient.BloodType = dto.BloodType;
+            if (dto.RhFactor != null) patient.RhFactor = dto.RhFactor;
+            if (dto.AllergicReactions != null) patient.AllergicReactions = dto.AllergicReactions;
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Данные обновлены" });
+        }
     }
 
     // DTO
@@ -661,5 +775,43 @@ namespace TelemedicineSystem.API.Controllers
         public string? ReferralPurpose { get; set; }
         public string? Tests { get; set; }
         public string? ServiceCode { get; set; }
+    }
+
+    public class PatientInfoDto
+    {
+        public Guid PatientId { get; set; }
+        public string Surname { get; set; }
+        public string Name { get; set; }
+        public string? MiddleName { get; set; }
+        public string FullName { get; set; }
+        public DateTime DateOfBirth { get; set; }
+        public int Age { get; set; }
+        public string Gender { get; set; }
+        public string? ContactInfo { get; set; }
+        public string? OmsPolicy { get; set; }
+        public DateTime MedicalBookCreatedAt { get; set; }
+        public string? MaritalStatus { get; set; }
+        public string? Education { get; set; }
+        public string? Employment { get; set; }
+        public string? Disability { get; set; }
+        public string? Workplace { get; set; }
+        public string? WorkplaceChanged { get; set; }
+        public string? BloodType { get; set; }
+        public string? RhFactor { get; set; }
+        public string? AllergicReactions { get; set; }
+    }
+
+    public class UpdatePatientInfoDto
+    {
+        public string? ContactInfo { get; set; }
+        public string? MaritalStatus { get; set; }
+        public string? Education { get; set; }
+        public string? Employment { get; set; }
+        public string? Disability { get; set; }
+        public string? Workplace { get; set; }
+        public string? WorkplaceChanged { get; set; }
+        public string? BloodType { get; set; }
+        public string? RhFactor { get; set; }
+        public string? AllergicReactions { get; set; }
     }
 }
