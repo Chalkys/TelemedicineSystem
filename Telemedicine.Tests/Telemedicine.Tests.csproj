@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -29,8 +29,6 @@
   <ItemGroup>
     <Folder Include="Helpers\" />
     <Folder Include="Integration\" />
-    <Folder Include="Unit\Controllers\" />
-    <Folder Include="Unit\Hubs\" />
   </ItemGroup>
 
 </Project>
