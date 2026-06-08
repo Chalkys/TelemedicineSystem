@@ -6,68 +6,94 @@ using Telemedicine.API.Services;
 using Telemedicine.Infrastructure.Data;
 using TelemedicineSystem.API.Hubs;
 using System.Threading.Tasks;
+using System.Security.Cryptography.X509Certificates;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. НАСТРОЙКА СЕРВИСОВ
-// Добавляем контроллеры - обрабатывают HTTP запросы (GET, POST и т.д.)
-builder.Services.AddControllers();
+// ===== НАСТРОЙКА KESTREL С HTTPS =====
+var certPath = "/app/cert.pem";
+var keyPath = "/app/key.pem";
 
-// Добавляем Swagger - автоматическая документация API (страница /swagger)
+if (File.Exists(certPath) && File.Exists(keyPath))
+{
+    var cert = X509Certificate2.CreateFromPemFile(certPath, keyPath);
+    builder.WebHost.ConfigureKestrel(serverOptions =>
+    {
+        serverOptions.ListenAnyIP(5095, listenOptions =>
+        {
+            listenOptions.UseHttps(cert);
+        });
+        serverOptions.ListenAnyIP(5096, listenOptions =>
+        {
+            listenOptions.UseHttps(cert);
+        });
+    });
+    Console.WriteLine("HTTPS enabled with custom certificate");
+}
+else
+{
+    builder.WebHost.ConfigureKestrel(serverOptions =>
+    {
+        serverOptions.ListenAnyIP(5095);
+    });
+    Console.WriteLine("HTTPS disabled - certificate not found");
+}
+
+// Добавляем контроллеры
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Подключаем PostgreSQL через Entity Framework
+// Подключаем PostgreSQL
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 2. НАСТРОЙКА JWT АУТЕНТИФИКАЦИИ (проверка токенов)
-
-var jwtKey = builder.Configuration["Jwt:Key"];      // Секретный ключ из appsettings.json
-var key = Encoding.UTF8.GetBytes(jwtKey);           // Преобразуем строку в байты
-
-builder.Services.AddAuthentication(options =>
+// Настройка JWT
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (!string.IsNullOrEmpty(jwtKey))
 {
-    // Говорим: "Для проверки входа используем JWT схему"
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.RequireHttpsMetadata = false;
-    options.SaveToken = true;
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(key),
-        ValidateIssuer = true,
-        ValidIssuer = builder.Configuration["Jwt:Issuer"],
-        ValidateAudience = true,
-        ValidAudience = builder.Configuration["Jwt:Audience"],
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero
-    };
+    var key = Encoding.UTF8.GetBytes(jwtKey);
 
-    // Для SignalR — извлекаем токен из query string
-    options.Events = new JwtBearerEvents
+    builder.Services.AddAuthentication(options =>
     {
-        OnMessageReceived = context =>
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.RequireHttpsMetadata = false; // Для локального тестирования
+        options.SaveToken = true;
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            var accessToken = context.Request.Query["access_token"];
-            var path = context.HttpContext.Request.Path;
-            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(key),
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
             {
-                context.Token = accessToken;
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
             }
-            return Task.CompletedTask;
-        }
-    };
-});
+        };
+    });
+}
 
 builder.Services.AddSignalR();
 
-// 3. НАСТРОЙКА CORS (разрешаем запросы с других сайтов)
-
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -75,7 +101,6 @@ builder.Services.AddCors(options =>
         policy.SetIsOriginAllowed(origin =>
         {
             var uri = new Uri(origin);
-            // Разрешить localhost и любые локальные IP (192.168.x.x, 172.16-31.x.x, 10.x.x.x)
             return uri.IsLoopback ||
                    uri.Host.StartsWith("192.168.") ||
                    uri.Host.StartsWith("172.") ||
@@ -87,45 +112,23 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Регистрируем настройки Email, чтобы они были доступны через IOptions
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
-
-// Регистрируем наш сервис как scoped (на время одного запроса)
 builder.Services.AddScoped<IEmailService, EmailService>();
 
-// 4. ПОСТРОЕНИЕ ПРИЛОЖЕНИЯ
 var app = builder.Build();
 
-// 5. НАСТРОЙКА HTTP-КОНВЕЙЕРА (порядок обработки запросов)
-
-// Включаем Swagger только в режиме разработки
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();      // Генерирует JSON документацию
-    app.UseSwaggerUI();    // Показывает красивую страницу /swagger
+    app.UseSwagger();
+    app.UseSwaggerUI();
     app.UseDeveloperExceptionPage();
 }
 
-// Перенаправляем HTTP на HTTPS заккоментированное перенаправление app.UseHttpsRedirection();
-
 app.UseStaticFiles();
-
-// ВАЖНО: CORS должен быть ДО аутентификации!
 app.UseCors("AllowFrontend");
-
-// Аутентификация - проверяет, кто отправил запрос (проверяет JWT токен)
 app.UseAuthentication();
-
-// Авторизация - проверяет, имеет ли пользователь право на действие
 app.UseAuthorization();
-
 app.MapHub<ConsultationHub>("/hubs/consultation");
-
-// Запускаем контроллеры (обработчики API запросов)
 app.MapControllers();
 
-app.Urls.Add("https://0.0.0.0:5096");
-app.Urls.Add("http://0.0.0.0:5095");
-
-// Запускаем приложение
 app.Run();

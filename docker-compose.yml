@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: telemedicine-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: Telemedicine
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - telemedicine-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d Telemedicine"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Telemedicine.API/Dockerfile
+    container_name: telemedicine-api
+    ports:
+      - "5095:5095"
+      - "5096:5096"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=Telemedicine;Username=postgres;Password=1234
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - telemedicine-network
+    volumes:
+      - ./Telemedicine.API/Uploads:/app/Uploads
+
+volumes:
+  postgres_data:
+
+networks:
+  telemedicine-network:
+    driver: bridge
