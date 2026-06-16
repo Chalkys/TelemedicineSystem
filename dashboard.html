@@ -569,12 +569,12 @@
                             ${entry.previousDiagnoses ? `<p><strong>Ранее поставленные диагнозы:</strong> ${entry.previousDiagnoses}</p>` : ''}
                             ${entry.currentMedications ? `<p><strong>Принимаемые медикаменты:</strong> ${entry.currentMedications}</p>` : ''}
                             ${entry.disease ? `<p>МКБ-10: <strong>${entry.disease.mkbCode}</strong> — ${entry.disease.name}</p>` : ''}
-                            ${entry.conclusion ? `<p>${entry.conclusion}</p>` : ''}
-                            ${entry.medications && entry.medications.length > 0 ? `<p>Медикаменты: ${entry.medications.map(m => `${m.name} (${m.dosage || '—'}, ${m.frequency || '—'})`).join('; ')}</p>` : ''}
-                            ${entry.procedures && entry.procedures.length > 0 ? `<p>Процедуры: ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
-                            ${entry.analyses && entry.analyses.length > 0 ? `<p>Анализы: ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
+                            ${entry.conclusion ? `<p><strong>Предварительный диагноз:</strong> ${entry.conclusion}</p>` : ''}
+                            ${entry.medications && entry.medications.length > 0 ? `<p><strong>Медикаменты:</strong> ${entry.medications.map(m => `${m.name} (${m.dosage || '—'}, ${m.frequency || '—'})`).join('; ')}</p>` : ''}
+                            ${entry.procedures && entry.procedures.length > 0 ? `<p><strong>Процедуры:</strong> ${entry.procedures.map(p => p.name).join(', ')}</p>` : ''}
+                            ${entry.analyses && entry.analyses.length > 0 ? `<p><strong>Анализы:</strong> ${entry.analyses.map(a => a.name).join(', ')}</p>` : ''}
                             ${entry.referrals && entry.referrals.length > 0 ? `<div style="margin-top:6px;"><strong>Направления на анализ:</strong> ${entry.referrals.map(r => `${r.organizationName ? + r.organizationName + ': ' : ''}${r.tests}${r.referralPurpose ? ' (' + r.referralPurpose + ')' : ''}${r.serviceCode ? ' [код: ' + r.serviceCode + ']' : ''}`).join('<br>')}</div>` : ''}
-                            ${entry.recommendations ? `<p>Рекомендации: ${entry.recommendations}</p>` : ''}
+                            ${entry.recommendations ? `<p><strong>Рекомендации:</strong> ${entry.recommendations}</p>` : ''}
                             ${entry.documents && entry.documents.length > 0 ? `<div style="margin-top:8px;"><strong>Документы:</strong> ${entry.documents.map(d => `<a href="#" onclick="downloadDocFromMedbook('${d.documentId}','${d.fileName.replace(/'/g, "\\'")}');return false;" style="color:#11998e;margin-left:5px;">📄 ${d.fileName}</a>`).join('')}</div>` : ''}
                         </div>`;
                 });
