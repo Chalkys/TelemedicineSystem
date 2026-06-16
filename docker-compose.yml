@@ -17,6 +17,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   api:
     build:
@@ -24,11 +25,13 @@ services:
       dockerfile: Telemedicine.API/Dockerfile
     container_name: telemedicine-api
     ports:
-      - "5095:5095"
       - "5096:5096"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://0.0.0.0:5096
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=Telemedicine;Username=postgres;Password=1234
+      - EmailSettings__Password=UPxOLAhyCdXd3dbqhVGV
+      - EmailSettings__Port=2525
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,6 +39,7 @@ services:
       - telemedicine-network
     volumes:
       - ./Telemedicine.API/Uploads:/app/Uploads
+    restart: unless-stopped
 
 volumes:
   postgres_data:

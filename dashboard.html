@@ -229,7 +229,7 @@
 </head>
 <body>
     <header>
-        <div class="logo">🏥 Телемедицина</div>
+        <div class="logo">🏥 ТелеМед</div>
         <div>
             <span id="userName" style="margin-right:15px;">Загрузка...</span>
             <button onclick="showPage('main')" class="btn btn-primary" style="background:rgba(255,255,255,0.2);">Главная</button>
@@ -241,7 +241,7 @@
     <div class="container" id="mainContent"></div>
 
     <script>
-        const API_URL = `https://${window.location.hostname}:5096`;
+        const API_URL = `http://127.0.0.1:5096`;
         const token = localStorage.getItem('token');
         const role = localStorage.getItem('role');
         let userData = null;

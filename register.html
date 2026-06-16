@@ -115,17 +115,6 @@
             .row .form-group {
                 flex: 1;
             }
-
-        .debug {
-            background: #333;
-            color: #0f0;
-            padding: 10px;
-            margin-top: 10px;
-            font-family: monospace;
-            font-size: 10px;
-            word-break: break-all;
-            display: none;
-        }
     </style>
 </head>
 <body>
@@ -186,7 +175,6 @@
         </form>
 
         <div id="message" class="message" style="display: none;"></div>
-        <div id="debugInfo" class="debug"></div>
 
         <div class="link">
             <a href="login.html">Уже есть аккаунт? Войти</a>
@@ -194,12 +182,11 @@
     </div>
 
     <script>
-        const API_URL = `https://${window.location.hostname}:5096`;
+        const API_URL = `http://127.0.0.1:5096`;
 
         document.getElementById('registerForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
-            // Получаем дату в правильном формате YYYY-MM-DD
             const dateOfBirth = document.getElementById('dateOfBirth').value;
 
             const data = {
@@ -208,24 +195,17 @@
                 surname: document.getElementById('surname').value,
                 name: document.getElementById('name').value,
                 middleName: document.getElementById('middlename').value || "",
-                dateOfBirth: dateOfBirth,  // Уже в формате YYYY-MM-DD
+                dateOfBirth: dateOfBirth,
                 gender: document.getElementById('gender').value,
                 contactInfo: document.getElementById('contactInfo').value || "",
                 insurancePolicyNumber: document.getElementById('insurancePolicyNumber').value || ""
             };
 
             const messageDiv = document.getElementById('message');
-            const debugDiv = document.getElementById('debugInfo');
 
             messageDiv.style.display = 'block';
             messageDiv.className = 'message info';
             messageDiv.textContent = 'Отправка данных...';
-
-            // Отладка: показываем что отправляем
-            debugDiv.style.display = 'block';
-            debugDiv.innerHTML = '📤 Отправка JSON:<br>' + JSON.stringify(data, null, 2);
-
-            console.log('Sending data:', data);
 
             try {
                 const response = await fetch(`${API_URL}/api/Auth/register/patient`, {
@@ -236,13 +216,6 @@
                     body: JSON.stringify(data)
                 });
 
-                console.log('Response status:', response.status);
-                debugDiv.innerHTML += '<br><br>📥 Статус ответа: ' + response.status;
-
-                // Получаем ответ как текст (для отладки)
-                const responseText = await response.text();
-                debugDiv.innerHTML += '<br><br>📄 Тело ответа:<br>' + responseText;
-
                 if (response.ok) {
                     messageDiv.className = 'message success';
                     messageDiv.textContent = '✅ Регистрация успешна! Перенаправление...';
@@ -250,16 +223,12 @@
                     setTimeout(() => {
                         window.location.href = 'login.html';
                     }, 2000);
-                } else if (response.status === 400) {
-                    messageDiv.className = 'message error';
-                    messageDiv.textContent = '❌ Ошибка 400: Неправильные данные. Проверьте формат даты и полей.';
                 } else {
+                    const responseText = await response.text();
                     messageDiv.className = 'message error';
-                    messageDiv.textContent = '❌ Ошибка ' + response.status + ': ' + responseText;
+                    messageDiv.textContent = '❌ Ошибка: ' + responseText;
                 }
             } catch (error) {
-                console.error('Network error:', error);
-                debugDiv.innerHTML += '<br><br>⚠️ Ошибка сети: ' + error.message;
                 messageDiv.className = 'message error';
                 messageDiv.textContent = '❌ Ошибка подключения к серверу. Убедитесь, что API запущен.';
             }

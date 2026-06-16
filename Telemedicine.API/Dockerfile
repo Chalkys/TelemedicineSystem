@@ -1,6 +1,5 @@
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
-EXPOSE 5095
 EXPOSE 5096
 
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
@@ -19,6 +18,4 @@ RUN dotnet publish "Telemedicine.API.csproj" -c Release -o /app/publish /p:UseAp
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-COPY cert.pem /app/
-COPY key.pem /app/
 ENTRYPOINT ["dotnet", "Telemedicine.API.dll"]
